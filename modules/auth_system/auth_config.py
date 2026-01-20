@@ -28,7 +28,7 @@ JWT_EXP_SECONDS = int(get_secret("auth", "token_expiration", 8 * 3600))  # 8h po
 COOKIE_SECRET = get_secret("auth", "cookie_secret", "dev_cookie_secret")
 COOKIE_NAME = get_secret("auth", "cookie_name", "dev_cookie")
 COOKIE_EXP_DAYS = int(get_secret("auth", "cookie_expiration_days", 1))
-APP_NAME = get_secret("auth", "app_name", "template")
+APP_NAME = get_secret("auth", "app_name", "antropometria_dux_logrono")
 
 # --- SERVER CONFIG ---
 COMPONENT_DOMAIN = get_secret("server", "component_domain", "localhost")

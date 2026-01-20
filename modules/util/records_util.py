@@ -1,105 +1,42 @@
 import streamlit as st
+import random
+from datetime import timedelta, date
 
-# def resolver_jugadora_final(jugadora_header, jug_df_filtrado, jug_df, tipo):
+def generar_valores_antropometria():
+    peso = round(random.uniform(55, 75), 1)
+    grasa = round(random.uniform(16, 28), 1)
+    muscular = round(random.uniform(38, 48), 1)
 
-#     # Si no hay NINGUNA jugadora disponible → fin
-#     if jug_df_filtrado.empty:
-#         st.session_state["last_player_id"] = None
-#         st.error(f"No hay más jugadoras disponibles para registrar {tipo}")
-#         st.stop()
+    masa_osea = round(random.uniform(2.3, 3.2), 2)
+    imo = round(muscular / masa_osea, 2)
 
-#     # ID actual entregado por el header
-#     new_id = str(jugadora_header["id_jugadora"]) if jugadora_header else None
+    return {
+        "peso_kg": peso,
+        "talla_cm": round(random.uniform(158, 178), 1),
+        "suma_6_pliegues_mm": round(random.uniform(45, 85), 1),
+        "porcentaje_grasa": grasa,
+        "porcentaje_muscular": muscular,
+        "masa_osea_kg": masa_osea,
+        "indice_musculo_oseo": imo,
+    }
 
-#     # IDs válidos en el filtrado actual
-#     current_ids = jug_df_filtrado["id_jugadora"].astype(str).tolist()
+def generar_fechas(
+    fecha_inicio: date,
+    fecha_fin: date,
+    n: int,
+    min_dias_sep: int = 28,
+):
+    # Validación rango mínimo (6 meses ≈ 180 días)
+    if (fecha_fin - fecha_inicio).days < 180:
+        raise ValueError("El rango de fechas debe ser de al menos 6 meses.")
 
-#     # ID bloqueado previamente
-#     prev_id = st.session_state.get("last_player_id")
+    fechas = []
+    fecha_actual = fecha_inicio
 
-#     # ------------------------------
-#     # 1. Primera asignación
-#     # ------------------------------
-#     if prev_id is None:
-#         if new_id is not None:
-#             st.session_state["last_player_id"] = new_id
-#         else:
-#             # Si no había selección, tomamos la PRIMERA jugadora disponible
-#             st.session_state["last_player_id"] = current_ids[0]
+    for _ in range(n):
+        fecha_actual = fecha_actual + timedelta(days=min_dias_sep)
+        if fecha_actual > fecha_fin:
+            break
+        fechas.append(fecha_actual)
 
-#     else:
-#         # ------------------------------
-#         # 2. Si cambia la jugadora del header
-#         # ------------------------------
-#         if new_id != prev_id:
-
-#             # Si la jugadora anterior ya no existe → reset a la primera disponible
-#             if prev_id not in current_ids:
-#                 st.session_state["last_player_id"] = current_ids[0]
-#                 st.warning("La jugadora seleccionada ya no se encontraba disponible.")
-#                 st.rerun()
-
-#             # Cambio manual → actualizar bloqueada
-#             st.session_state["last_player_id"] = new_id
-
-#     # ------------------------------
-#     # 3. Jugadora final bloqueada
-#     # ------------------------------
-#     locked_id = st.session_state.get("last_player_id")
-
-#     if locked_id is None:
-#         st.error("Error interno: No se pudo resolver la jugadora seleccionada.")
-#         st.rerun()
-
-#     # Buscar jugadora final exacta
-#     jugadora_rows = jug_df[jug_df["id_jugadora"].astype(str) == locked_id]
-
-#     if jugadora_rows.empty:
-#         st.session_state["last_player_id"] = None
-#         st.error("La jugadora seleccionada ya no se encuentra disponible.")
-#         st.stop()
-
-#     # Devolver jugadora final
-#     return jugadora_rows.iloc[0].to_dict()
-
-import streamlit as st
-
-def resolver_jugadora_final(jugadora_header, jug_df_filtrado, jug_df, tipo, ctx_key: str):
-    """
-    ctx_key debe ser estable por (session_id + plantel + tipo + turno).
-    Así evitamos que un cambio de turno/plantel rompa la selección.
-    """
-    # if jug_df_filtrado.empty:
-    #     st.session_state[f"last_player_id__{ctx_key}"] = None
-    #     st.error(f"No hay más jugadoras disponibles para registrar {tipo}")
-    #     st.stop()
-
-    current_ids = jug_df_filtrado["id_jugadora"].astype(str).tolist()
-    state_key = f"last_player_id__{ctx_key}"
-
-    prev_id = st.session_state.get(state_key)
-    new_id = str(jugadora_header["id_jugadora"]) if jugadora_header else None
-
-    # 1) Si no había bloqueada aún
-    if prev_id is None:
-        st.session_state[state_key] = new_id if (new_id in current_ids) else current_ids[0]
-
-    # 2) Cambio manual real: solo si el nuevo id existe en el filtrado actual
-    elif new_id and new_id != prev_id and new_id in current_ids:
-        st.session_state[state_key] = new_id
-
-    # 3) Si la bloqueada ya no existe, fallback
-    locked_id = st.session_state.get(state_key)
-    if locked_id not in current_ids:
-        locked_id = current_ids[0]
-        st.session_state[state_key] = locked_id
-        print("no encontrada")
-
-    # 4) Resolver jugadora final desde el DF completo
-    rows = jug_df[jug_df["id_jugadora"].astype(str) == locked_id]
-    if rows.empty:
-        st.session_state[state_key] = None
-        st.error("La jugadora seleccionada ya no se encuentra disponible.")
-        st.stop()
-
-    return rows.iloc[0].to_dict()
+    return fechas

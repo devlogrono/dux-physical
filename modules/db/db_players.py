@@ -12,7 +12,7 @@ def load_players_db() -> pd.DataFrame | None:
     sql = """
         SELECT 
             f.id,
-            f.identificacion AS id_jugadora,
+            f.identificacion,
             f.nombre,
             f.apellido,
             f.competicion AS plantel,
@@ -46,7 +46,7 @@ def load_players_db() -> pd.DataFrame | None:
     df["nombre_jugadora"] = (df["nombre"] + " " + df["apellido"]).str.strip().str.upper()
 
     orden = [
-        "id", "id_jugadora", "nombre_jugadora", "nombre", "apellido", "posicion", "plantel",
+        "id", "identificacion", "nombre_jugadora", "nombre", "apellido", "posicion", "plantel",
         "dorsal", "nacionalidad", "altura", "peso", "fecha_nacimiento",
         "genero", "foto_url"
     ]

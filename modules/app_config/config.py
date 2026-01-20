@@ -5,7 +5,7 @@ import uuid
 
 def init_config():
     # Streamlit page config
-    st.set_page_config(page_title="Dux Logroño - Template", page_icon="assets/images/logo_transparente.png", layout="wide")
+    st.set_page_config(page_title="Dux Logroño - Antropometria", page_icon="assets/images/logo_transparente.png", layout="wide")
 
     # Generar un ID único por navegador/pestaña
     if "client_session_id" not in st.session_state:

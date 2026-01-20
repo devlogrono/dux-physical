@@ -8,50 +8,40 @@ from modules.db.db_client import query, execute
 
 def get_records_db(as_df: bool = True):
     """
-    Carga registros de template, con joins ya incluidos.
+    Carga registros de antropometría con joins incluidos.
     """
 
-    zonas_anatomicas_df = load_catalog_list_db("zonas_anatomicas", as_df=True)
-    map_zonas = dict(zip(zonas_anatomicas_df["id"], zonas_anatomicas_df["nombre"]))
-
     sql = """
-        SELECT 
-            w.id,
-            w.id_jugadora,
+        SELECT
+            a.id_antropometria as id,
+            a.id_jugadora as identificacion,
+
             f.nombre,
             f.apellido,
             f.competicion AS plantel,
-            w.fecha_sesion,
-            w.tipo,
-            w.turno,
-            w.recuperacion,
-            w.fatiga AS energia,
-            w.sueno,
-            w.stress,
-            w.dolor,
-            zs.nombre AS zona_segmento,
-            w.zonas_anatomicas_dolor,
-            w.lateralidad_dolor,
-            w.periodizacion_tactica,
-            ec.nombre AS tipo_carga,
-            er.nombre AS rehabilitación_readaptación,
-            tc.nombre AS condicion,
-            w.minutos_sesion,
-            w.rpe,
-            w.ua,
-            w.en_periodo,
-            w.observacion,
-            w.fecha_hora_registro,
-            w.usuario
-        FROM template AS w
-        LEFT JOIN futbolistas f ON w.id_jugadora = f.identificacion
-        LEFT JOIN tipo_carga ec ON w.id_tipo_carga = ec.id
-        LEFT JOIN estimulos_readaptacion er ON w.id_tipo_readaptacion = er.id
-        LEFT JOIN tipo_condicion tc ON w.id_condicion = tc.id
-        LEFT JOIN zonas_segmento zs ON w.id_zona_segmento_dolor = zs.id
-        WHERE f.genero = 'F' and f.id_estado = 1
-        AND w.estatus_id <= 2
-        ORDER BY w.fecha_hora_registro DESC;
+
+            a.metodo,
+            a.peso_kg,
+            a.talla_cm,
+            a.suma_6_pliegues_mm,
+            a.porcentaje_grasa,
+            a.porcentaje_muscular,
+            a.masa_osea_kg,
+            a.indice_musculo_oseo,
+
+            a.observaciones,
+            a.fecha_hora_registro as fecha_sesion,
+            a.usuario
+
+        FROM antropometria AS a
+        LEFT JOIN futbolistas AS f
+            ON a.id_jugadora = f.identificacion
+
+        WHERE f.genero = 'F'
+          AND f.id_estado = 1
+          AND a.estatus_id <= 2
+
+        ORDER BY a.fecha_hora_registro DESC;
     """
 
     rows = query(sql)
@@ -60,20 +50,12 @@ def get_records_db(as_df: bool = True):
 
     df = pd.DataFrame(rows)
 
-    # Procesar JSON
-    df["zonas_anatomicas_dolor"] = df["zonas_anatomicas_dolor"].apply(
-        lambda x: json.loads(x) if isinstance(x, str) and x.strip().startswith("[") else []
-    )
-
-    df["zonas_anatomicas_dolor"] = df["zonas_anatomicas_dolor"].apply(
-        lambda ids: [map_zonas.get(i, f"ID {i}") for i in ids]
-    )
-
     # Convertir fechas
-    df["fecha_sesion"] = pd.to_datetime(df["fecha_sesion"], errors="coerce").dt.date
-    df["fecha_hora_registro"] = pd.to_datetime(df["fecha_hora_registro"], errors="coerce")
+    df["fecha_sesion"] = pd.to_datetime(
+        df["fecha_sesion"], errors="coerce"
+    )
 
-    # Filtrar por rol
+    # Filtro por rol
     rol = st.session_state["auth"]["rol"].lower()
     if rol == "developer":
         df = df[df["usuario"] == "developer"]
@@ -81,128 +63,111 @@ def get_records_db(as_df: bool = True):
         df = df[df["usuario"] != "developer"]
 
     # Columna nombre_jugadora
-    df.insert(2, "nombre_jugadora", (df["nombre"] + " " + df["apellido"]).str.strip().str.upper())
+    df.insert(
+        2,
+        "nombre_jugadora",
+        (df["nombre"] + " " + df["apellido"])
+        .str.strip()
+        .str.upper()
+    )
 
     df = df.drop(columns=["nombre", "apellido"], errors="ignore")
-    
-    return df if as_df else df.to_dict("records")
-      
-def upsert_record_db(record: dict, modo: str = "checkin") -> bool:
 
+    return df if as_df else df.to_dict("records")
+   
+def upsert_record_db(record: dict) -> bool:
     usuario_actual = st.session_state["auth"]["name"].lower()
 
-    # Fecha normalizada
-    fecha_sesion = record.get("fecha_sesion")
-    if isinstance(fecha_sesion, str):
-        fecha_sesion = datetime.date.fromisoformat(fecha_sesion)
-
-    # Buscar si existe
-    existing = search_existing_record(record)
-
     # ============================
-    # UPDATE
+    # UPDATE (edición explícita)
     # ============================
-    if existing:
-        if modo.lower() == "checkout":
-            sql = """
-                UPDATE template
-                SET 
-                    tipo = 'checkOut',
-                    minutos_sesion = %(minutos_sesion)s,
-                    rpe = %(rpe)s,
-                    ua = %(ua)s,
-                    modified_by = %(modified_by)s,
-                    estatus_id = 2,
-                    updated_at = NOW()
-                WHERE id = %(id)s;
-            """
-            params = {
-                "minutos_sesion": record.get("minutos_sesion"),
-                "rpe": record.get("rpe"),
-                "ua": record.get("ua"),
-                "modified_by": usuario_actual,
-                "id": existing["id"],
-            }
+    if record.get("id_antropometria"):
+        sql = """
+            UPDATE antropometria
+            SET
+                metodo = %(metodo)s,
+                peso_kg = %(peso_kg)s,
+                talla_cm = %(talla_cm)s,
+                suma_6_pliegues_mm = %(suma_6_pliegues_mm)s,
+                porcentaje_grasa = %(porcentaje_grasa)s,
+                porcentaje_muscular = %(porcentaje_muscular)s,
+                masa_osea_kg = %(masa_osea_kg)s,
+                indice_musculo_oseo = %(indice_musculo_oseo)s,
+                observaciones = %(observaciones)s,
+                updated_at = NOW(),
+                modified_by = %(modified_by)s
+            WHERE id_antropometria = %(id_antropometria)s
+              AND deleted_at IS NULL;
+        """
 
-        else:
-            st.rerun()
+        params = {
+            **record,
+            "modified_by": usuario_actual,
+        }
+
         return execute(sql, params)
 
     # ============================
-    # INSERT (solo checkin)
+    # INSERT
     # ============================
-    if modo.lower() == "checkout":
-        st.warning("No existe un check-in previo.")
-        return False
-
     sql = """
-        INSERT INTO template (
-            id_jugadora, fecha_sesion, tipo, turno, periodizacion_tactica,
-            id_tipo_carga, id_tipo_readaptacion, recuperacion, fatiga, sueno,
-            stress, dolor, id_zona_segmento_dolor, zonas_anatomicas_dolor, lateralidad_dolor,
-            minutos_sesion, rpe, ua, en_periodo, observacion, usuario
+        INSERT INTO antropometria (
+            id_jugadora,
+            metodo,
+            peso_kg,
+            talla_cm,
+            suma_6_pliegues_mm,
+            porcentaje_grasa,
+            porcentaje_muscular,
+            masa_osea_kg,
+            indice_musculo_oseo,
+            observaciones,
+            usuario,
+            fecha_hora_registro,
+            created_at,
+            estatus_id
         ) VALUES (
-            %(id_jugadora)s, %(fecha_sesion)s, %(tipo)s, %(turno)s, %(periodizacion_tactica)s,
-            %(id_tipo_carga)s, %(id_tipo_readaptacion)s, %(recuperacion)s, %(fatiga)s, %(sueno)s,
-            %(stress)s, %(dolor)s, %(id_zona_segmento_dolor)s, CAST(%(zonas_anatomicas_dolor)s AS JSON),
-            %(lateralidad)s, %(minutos_sesion)s, %(rpe)s, %(ua)s,
-            %(en_periodo)s, %(observacion)s, %(usuario)s
+            %(id_jugadora)s,
+            %(metodo)s,
+            %(peso_kg)s,
+            %(talla_cm)s,
+            %(suma_6_pliegues_mm)s,
+            %(porcentaje_grasa)s,
+            %(porcentaje_muscular)s,
+            %(masa_osea_kg)s,
+            %(indice_musculo_oseo)s,
+            %(observaciones)s,
+            %(usuario)s,
+            %(fecha_hora_registro)s,
+            NOW(),
+            1
         );
     """
 
-    params = dict(record)
-    params["fecha_sesion"] = fecha_sesion
+    params = {
+        **record,
+        "usuario": usuario_actual,
+    }
 
     return execute(sql, params)
 
-def search_existing_record(record):
-
-    fecha_sesion = record.get("fecha_sesion")
-    if isinstance(fecha_sesion, str):
-        fecha_sesion = datetime.date.fromisoformat(fecha_sesion)
-
-    rol = st.session_state["auth"]["rol"].lower()
-    usuario_condition = (
-        "usuario = 'developer'"
-        if rol == "developer"
-        else "usuario != 'developer'"
-    )
-
-    sql = f"""
-        SELECT id FROM template
-        WHERE id_jugadora = %s
-          AND fecha_sesion = %s
-          AND turno = %s
-          AND estatus_id <= 2
-          AND {usuario_condition}
-        LIMIT 1;
-    """
-
-    params = (
-        record["id_jugadora"],
-        fecha_sesion,
-        record["turno"]
-    )
-
-    rows = query(sql, params)
-    return rows[0] if rows else None
 
 def delete_record(ids: list[int], deleted_by: str) -> tuple[bool, str]:
     """
-    Soft-delete: marca registros de template como eliminados (estatus_id = 3).
+    Soft-delete: marca registros de antropometria como eliminados.
     """
     if not ids:
-        return False, "No se proporcionaron IDs de template."
+        return False, "No se proporcionaron IDs de antropometría."
 
     placeholders = ",".join(["%s"] * len(ids))
 
     sql = f"""
-        UPDATE template
-        SET 
-            estatus_id = 3,
+        UPDATE antropometria
+        SET
             deleted_at = NOW(),
-            deleted_by = %s
-        WHERE id IN ({placeholders})
+            deleted_by = %s,
+            estatus_id = 3
+        WHERE id_antropometria IN ({placeholders});
     """
 
     params = tuple([deleted_by] + ids)

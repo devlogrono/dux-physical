@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from modules.app_config import styles
+import plotly.graph_objects as go
 from modules.i18n.i18n import t
 
 # ============================================================
@@ -26,210 +26,204 @@ def _ensure_fecha(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def plot_distribuciones(df: pd.DataFrame):
+    df = df.copy()
 
-# ============================================================
-# 📊 Carga semanal (UA)
-# ============================================================
-def plot_carga_semanal(df: pd.DataFrame):
-    """Evolución semanal de la carga total y media del grupo."""
-    df = _ensure_fecha(df)
-    if df.empty or df["ua"].isna().all():
-        st.info("No hay datos de carga disponibles.")
+    columnas = {
+        "peso_kg": t("Peso (kg)"),
+        "talla_cm": t("Talla (cm)"),
+        "suma_6_pliegues_mm": t("Suma 6 pliegues (mm)"),
+        "porcentaje_grasa": t("% Grasa"),
+        "porcentaje_muscular": t("% Muscular"),
+        "masa_osea_kg": t("Masa ósea (kg)"),
+        "indice_musculo_oseo": t("Índice músculo–óseo"),
+    }
+
+    for col, titulo in columnas.items():
+        if col not in df.columns or df[col].dropna().empty:
+            continue
+
+        valores = pd.to_numeric(df[col], errors="coerce").dropna()
+
+        fig = px.histogram(
+            valores,
+            nbins=12,
+            title=f"{titulo} — {t('Distribución grupal')}",
+            color_discrete_sequence=["#2E86C1"],
+        )
+
+        fig.add_vline(
+            x=valores.mean(),
+            line_dash="dash",
+            line_color="green",
+            annotation_text=t("Promedio"),
+        )
+
+        fig.update_layout(
+            xaxis_title=titulo,
+            yaxis_title=t("Número de jugadoras"),
+            template="plotly_white",
+        )
+
+        st.plotly_chart(fig)
+
+def plot_comparacion_mediciones(df: pd.DataFrame):
+    if "fecha_sesion" not in df.columns:
+        st.info(t("No hay fechas para comparar mediciones."))
         return
 
-    weekly = (
-        df.groupby(["anio", "semana", "rango_semana"], as_index=False)
-        .agg(
-            carga_total=("ua", "sum"),
-            carga_media=("ua", "mean"),
-            rpe_prom=("rpe", "mean"),
+    # -------------------------
+    # CAPTION (DESCRIPCIÓN DEL GRÁFICO)
+    # -------------------------
+    st.caption(
+        t(
+            "La gráfica muestra el cambio porcentual promedio del grupo entre la primera y la segunda medición. "
+            "Valores positivos indican aumento respecto a la primera medición, mientras que valores negativos "
+            "indican disminución."
         )
     )
 
-    fig = px.line(
-        weekly,
-        x="rango_semana",
-        y="carga_total",
-        markers=True,
-        title=t("Carga total semanal (UA)"),
-        color_discrete_sequence=[styles.BRAND_PRIMARY],
-    )
-    fig.update_traces(line=dict(width=3))
-    fig.update_layout(
-        xaxis_title=t("Semana"),
-        yaxis_title=t("Carga (UA)"),
-        plot_bgcolor="white",
-        font_color=styles.BRAND_TEXT,
-    )
-    st.plotly_chart(fig, use_container_width=False)
+    df = df.sort_values("fecha_sesion")
 
-    columnas_visibles = [
-        "rango_semana", 
-        "carga_total", 
-        "carga_media", 
-        "rpe_prom"
-    ]
-
-    st.dataframe(
-        weekly[columnas_visibles].rename(
-            columns={
-                "rango_semana": "Semana",
-                "carga_total": "Carga total (UA)",
-                "carga_media": "Carga media (UA)",
-                "rpe_prom": "RPE promedio",
-            }
-        ),
-        hide_index=True,
+    df["orden_medicion"] = (
+        df.groupby("identificacion").cumcount() + 1
     )
 
+    df = df[df["orden_medicion"].isin([1, 2])]
 
-# ============================================================
-# 📉 RPE promedio diario
-# ============================================================
-def plot_rpe_promedio(df: pd.DataFrame):
-    """Promedio de RPE diario del grupo."""
-    df = _ensure_fecha(df)
-    if "rpe" not in df.columns:
-        st.warning("No se encontró la columna RPE.")
+    if df["orden_medicion"].nunique() < 2:
+        st.info(t("No hay suficientes mediciones para comparar."))
         return
-
-    daily = df.groupby("fecha_sesion", as_index=False)["rpe"].mean()
-
-    fig = px.bar(
-        daily,
-        x="fecha_sesion",
-        y="rpe",
-        title=t("RPE promedio diario"),
-        color="rpe",
-        color_continuous_scale=[
-            styles.SEMAFORO["verde_oscuro"],
-            styles.SEMAFORO["amarillo"],
-            styles.SEMAFORO["rojo"],
-        ],
-    )
-    fig.update_layout(
-        xaxis_title=t("Fecha"),
-        yaxis_title=t("RPE promedio"),
-        plot_bgcolor="white",
-        font_color=styles.BRAND_TEXT,
-        coloraxis_colorbar=dict(title="RPE"),
-    )
-    st.plotly_chart(fig, use_container_width=False)
-
-
-# ============================================================
-# ⚙️ Monotonía y fatiga aguda
-# ============================================================
-def plot_monotonia_fatiga(df: pd.DataFrame):
-    """Calcula y muestra el índice de monotonía y fatiga aguda por microciclo."""
-    df = _ensure_fecha(df)
-    if "ua" not in df.columns:
-        st.warning("No se encontró la columna UA.")
-        return
-
-    weekly = (
-        df.groupby(["anio", "semana"], as_index=False)["ua"]
-        .agg(["sum", "std", "mean"])
-        .reset_index()
-        .rename(columns={"sum": "carga_total", "std": "desv_std", "mean": "media"})
-    )
-    weekly["monotonia"] = weekly["media"] / weekly["desv_std"].replace(0, pd.NA)
-    weekly["fatiga_aguda"] = weekly["carga_total"] * weekly["monotonia"]
-
-    fig = px.line(
-        weekly,
-        x="semana",
-        y=["monotonia", "fatiga_aguda"],
-        markers=True,
-        title=t(":material/stacked_line_chart: Monotonía y Fatiga Aguda"),
-        color_discrete_map={
-            "monotonia": styles.SEMAFORO["naranja"],
-            "fatiga_aguda": styles.SEMAFORO["rojo"],
-        },
-    )
-    fig.update_layout(
-        xaxis_title=t("Semana"),
-        yaxis_title=t("Valor del índice"),
-        plot_bgcolor="white",
-        font_color=styles.BRAND_TEXT,
-    )
-    st.plotly_chart(fig, use_container_width=False)
-
-
-# ============================================================
-# 📈 Relación Carga Aguda : Crónica (ACWR)
-# ============================================================
-def plot_acwr(df: pd.DataFrame):
-    """Calcula la relación ACWR y pinta zonas de referencia con colores del semáforo."""
-    df = _ensure_fecha(df)
-    if "ua" not in df.columns:
-        st.warning("No se encontró la columna UA.")
-        return
-
-    weekly = df.groupby(["anio", "semana"], as_index=False)["ua"].sum()
-    weekly.rename(columns={"ua": "carga"}, inplace=True)
-
-    # Carga aguda (semana actual) vs carga crónica (media de 3 previas)
-    weekly["acwr"] = weekly["carga"] / weekly["carga"].rolling(4, min_periods=2).mean().shift(1)
-
-    fig = px.line(
-        weekly,
-        x="semana",
-        y="acwr",
-        markers=True,
-        title=t(":material/analytics: Relación Carga Aguda : Crónica (ACWR)"),
-        color_discrete_sequence=[styles.SEMAFORO["verde_oscuro"]],
-    )
-
-    # --- Zonas semafóricas de referencia ---
-    fig.add_hrect(
-        y0=0.8, y1=1.3,
-        fillcolor=styles.SEMAFORO["verde_claro"], opacity=0.2, line_width=0
-    )
-    fig.add_hrect(
-        y0=1.3, y1=1.5,
-        fillcolor=styles.SEMAFORO["amarillo"], opacity=0.2, line_width=0
-    )
-    fig.add_hrect(
-        y0=1.5, y1=2.0,
-        fillcolor=styles.SEMAFORO["rojo"], opacity=0.2, line_width=0
-    )
-
-    fig.update_layout(
-        xaxis_title=t("Semana"),
-        yaxis_title=t("ACWR"),
-        plot_bgcolor="white",
-        font_color=styles.BRAND_TEXT,
-    )
-    st.plotly_chart(fig, use_container_width=False)
-
-def tabla_resumen(df_filtrado):
-    # df_filtrado["jugadora"] = (
-    #     df_filtrado["nombre"].fillna("") + " " + df_filtrado["apellido"].fillna("")
-    # ).str.strip()
 
     resumen = (
-        df_filtrado.groupby(["nombre_jugadora"], as_index=False)
+        df.groupby("orden_medicion")
         .agg(
-            carga_total=("ua", "sum"),
-            rpe_promedio=("rpe", "mean"),
-            sesiones=("ua", "count"),
+            peso=("peso_kg", "mean"),
+            pliegues=("suma_6_pliegues_mm", "mean"),
+            imo=("indice_musculo_oseo", "mean"),
         )
-        .sort_values("carga_total", ascending=False)
     )
 
-    resumen["carga_total"] = resumen["carga_total"].round(0)
-    resumen["rpe_promedio"] = resumen["rpe_promedio"].round(2)
-    resumen = resumen.fillna(0)
-    resumen.index = resumen.index + 1
+    base = resumen.loc[1]
+    actual = resumen.loc[2]
+
+    delta = ((actual - base) / base) * 100
+
+    delta_df = delta.reset_index()
+    delta_df.columns = ["variable", "delta_pct"]
+
+    # -------------------------
+    # COLORES SEMÁNTICOS
+    # -------------------------
+    delta_df["color"] = delta_df["delta_pct"].apply(
+        lambda x: "#2ECC71" if x > 0 else "#E74C3C"
+    )
+
+    y_min = delta_df["delta_pct"].min()
+    y_max = delta_df["delta_pct"].max()
+
+    padding = max(abs(y_min), abs(y_max)) * 0.15  # 15% de margen
+    # -------------------------
+    # GRÁFICO
+    # -------------------------
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=delta_df["variable"],
+        y=delta_df["delta_pct"],
+        marker_color=delta_df["color"],
+        text=delta_df["delta_pct"].map(lambda x: f"{x:+.2f}%"),
+        textposition="outside",
+    textfont=dict(size=12, color="#2C3E50"),
+    ))
+
+    fig.update_layout(
+        uniformtext=dict(
+        minsize=10,
+        mode="show"),
+        yaxis=dict(
+            title=t("Cambio (%) respecto a la 1ª medición"),
+            range=[y_min - padding, y_max + padding],
+            zeroline=True,
+            zerolinewidth=2,
+            zerolinecolor="#BDC3C7",
+        ),
+        #title=t("Variación porcentual entre mediciones"),
+        yaxis_title=t("Cambio (%) respecto a la 1ª medición"),
+        xaxis_title="",
+        template="plotly_white",
+        showlegend=False,
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------
+    # TEXTO EXPLICATIVO (INTERPRETACIÓN)
+    # -------------------------
+    frases = []
+
+    if delta["peso"] > 0:
+        frases.append(t("un ligero aumento del peso corporal"))
+    elif delta["peso"] < 0:
+        frases.append(t("una ligera disminución del peso corporal"))
+    else:
+        frases.append(t("estabilidad del peso corporal"))
+
+    if delta["pliegues"] < 0:
+        frases.append(t("una reducción de los pliegues cutáneos"))
+    elif delta["pliegues"] > 0:
+        frases.append(t("un aumento de los pliegues cutáneos"))
+
+    if delta["imo"] > 0:
+        frases.append(t("una mejora del índice músculo-óseo"))
+    elif delta["imo"] < 0:
+        frases.append(t("un descenso del índice músculo-óseo"))
+
+    texto_explicativo = (
+        t("Entre la primera y la segunda medición se observa ")
+        + ", ".join(frases)
+        + "."
+    )
+
+    st.markdown(
+        f"""
+        **{t("Interpretación de los resultados:")}**
+        {texto_explicativo}
+        """
+    )
+
+
+def tabla_resumen(df: pd.DataFrame):
+    resumen = (
+        df.groupby("nombre_jugadora", as_index=False)
+        .agg(
+            peso=("peso_kg", "mean"),
+            grasa=("porcentaje_grasa", "mean"),
+            pliegues=("suma_6_pliegues_mm", "mean"),
+            imo=("indice_musculo_oseo", "mean"),
+        )
+    )
+
+    for col in ["peso", "grasa", "pliegues", "imo"]:
+        resumen[col] = resumen[col].map(
+            lambda x: f"{x:.2f}" if pd.notna(x) else "-"
+        )
+
+
+    st.caption(
+        t(
+            "Valores promedio de los controles antropométricos registrados "
+            "para cada jugadora durante el periodo seleccionado."
+        )
+    )
 
     st.dataframe(
-        resumen.rename(
-            columns={
-                "nombre_jugadora": "Jugadora",
-                "carga_total": "Carga total (UA)",
-                "rpe_promedio": "RPE promedio",
-                "sesiones": "Nº sesiones",
-            }
-        ),
+        resumen.rename(columns={
+            "nombre_jugadora": t("Jugadora"),
+            "peso": t("Peso medio (kg)"),
+            "grasa": t("% Grasa media"),
+            "pliegues": t("6 Pliegues medios (mm)"),
+            "imo": t("Índice M/O medio"),
+        }),
+        hide_index=True,
     )

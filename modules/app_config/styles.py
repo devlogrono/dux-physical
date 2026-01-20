@@ -1,6 +1,6 @@
 """
 🎨 Estilos y paletas globales del proyecto CheckInOut.
-Incluye colores corporativos, escalas semafóricas y paletas de interpretación template.
+Incluye colores corporativos, escalas semafóricas y paletas de interpretación.
 """
 
 # --- Colores corporativos ---
@@ -19,7 +19,7 @@ SEMAFORO = {
     "gris": "#BDBDBD"
 }
 
-# --- Escalas de interpretación template ---
+# --- Escalas de interpretación ---
 template_COLOR_NORMAL = {
     1: "#E74C3C",  # rojo
     2: "#E67E22",  # naranja
