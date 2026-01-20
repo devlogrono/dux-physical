@@ -1,6 +1,6 @@
-# Template App
+# Physical App
 
-Aplicación en Streamlit (Template).
+Aplicación en Streamlit (Antropometria).
 
 ## Estructura
 
@@ -36,7 +36,7 @@ streamlit run app.py
 
 ```json
 {
-  "id_jugadora": "...",
+  "identificacion": "...",
   "nombre": "...",
   "fecha_hora": "YYYY-MM-DDTHH:MM:SS",
   "tipo": "tipo",
@@ -56,7 +56,7 @@ streamlit run app.py
 }
 ```
 
-Clave de actualización (upsert): `(id_jugadora, fecha YYYY-MM-DD, turno)`.
+Clave de actualización (upsert): `(identificacion, fecha YYYY-MM-DD, turno)`.
 El campo `turno` es obligatorio en el formulario (por defecto: "Turno 1").
 Si ya existe un registro para esa combinación, al guardar se actualiza en lugar de crear uno nuevo.
 
@@ -103,7 +103,7 @@ from i18n.i18n import t, language_selector
 
 language_selector()  # Selector en la barra lateral
 
-st.header(t("Resumen de template"))
+st.header(t("Resumen"))
 st.button(t("Guardar registro"))
 st.info(t("No hay registros disponibles en este periodo."))
 ```
@@ -128,13 +128,11 @@ ruff check . --select F401 --fix
 - Configuración de remoto
 
 ```bash
-git remote add upstream https://github.com/devlogrono/dux_template.git
+git remote add upstream https://github.com/devlogrono/dux-physical.git/
 git remote -v
 ```
 
 - Crea una rama nueva para tus cambios
 - Realiza tus modificaciones y haz commit
 - Haz push a tu fork
-- Abre un Pull Request al repositorio original# template
-# template
-# dux_template
+- Abre un Pull Request al repositorio original

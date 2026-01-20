@@ -57,25 +57,20 @@ def data_format(df: pd.DataFrame):
     # 4. Volver a dejar fecha_sesion como date (sin warnings)
     df["fecha_sesion"] = df["fecha_sesion"].dt.date
 
-    # 5. template score
-    df["template_score"] = (
-        df[["recuperacion", "energia", "sueno", "stress", "dolor"]]
-        .sum(axis=1)
-    )
-
     return df
 
 def clean_df(records):
     columnas_excluir = [
-        "template_score",
-        "fecha_hora_registro",
+        "metodo",
+        "usuario",
+        "observaciones",
         "fecha_dia",
         "semana",
         "mes",
     ]
     
     # --- eliminar columnas si existen ---
-    df_traducido = records.drop(columns=[col for col in columnas_excluir if col in records.columns])
+    df_cleaned = records.drop(columns=[col for col in columnas_excluir if col in records.columns])
 
     #cols = list(df_filtrado.columns)
 
@@ -86,7 +81,7 @@ def clean_df(records):
     # }
 
     # rename_dict = {
-    #     "id_jugadora": t("Idenficación"),
+    #     "identificacion": t("Idenficación"),
     #     "nombre_jugadora": t("Jugadora"),
     #     "fecha_sesion": t("Fecha"),
     #     "Tipo": t("Tipo"),
@@ -113,9 +108,9 @@ def clean_df(records):
     #df_filtrado = df_filtrado[orden + [c for c in df_filtrado.columns if c not in orden]]
 
     #df_filtrado = df_filtrado.sort_values("fecha_hora_registro", ascending=False)
-    df_traducido.reset_index(drop=True, inplace=True)
-    df_traducido.index = df_traducido.index + 1
-    return df_traducido
+    df_cleaned.reset_index(drop=True, inplace=True)
+    df_cleaned.index = df_cleaned.index + 1
+    return df_cleaned
 
 def ordenar_df(df: pd.DataFrame, columna: str, ascendente: bool = True) -> pd.DataFrame:
     """

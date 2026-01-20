@@ -17,11 +17,11 @@ st.header(t("Análisis :red[grupal]"), divider="red")
 # Load reference data
 jug_df = load_players_db()
 comp_df = load_competitions_db()
-template_df = get_records_db()
+records_df = get_records_db()
 
 #st.dataframe(template_df, hide_index=True)    
 
-df, jugadora, tipo, turno, start, end = selection_header(jug_df, comp_df, template_df, modo="reporte_grupal")
+df_filtrado, jugadora, start, end = selection_header(jug_df, comp_df, records_df, modo="reporte_grupal")
 
 #st.dataframe(df, hide_index=True)
-group_dashboard(df)
+group_dashboard(df_filtrado)

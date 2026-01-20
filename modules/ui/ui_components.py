@@ -3,10 +3,9 @@ import streamlit as st
 import datetime
 import json
 from modules.util.key_builder import KeyBuilder
-from modules.util.records_util import resolver_jugadora_final
 from modules.util.util import get_date_range_input
 from modules.i18n.i18n import t
-from modules.schema import OPCIONES_TURNO
+from modules.schema import MAP_POSICIONES, OPCIONES_TURNO
 from modules.util.key_builder import KeyBuilder
 
 def selection_header(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd.DataFrame = None, modo: str = "registro") -> pd.DataFrame:
@@ -17,7 +16,7 @@ def selection_header(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd
 
     kb = KeyBuilder()
 
-    col1, col2, col3, col4 = st.columns([3, 2, 1.5, 2])
+    col1, col2, col3 = st.columns([3, 2, 2])
 
     # --- Selección de competición ---
     with col1:
@@ -85,40 +84,20 @@ def selection_header(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd
                 ":material/warning: No hay jugadoras cargadas para esta competición."
             )
 
-    # --- Selección de turno ---
-    with col3:
-        turno_traducido = st.selectbox(
-            t("Turno"),
-            list(OPCIONES_TURNO.values()),
-            index=0
-        )
-        turno = next(k for k, v in OPCIONES_TURNO.items() if v == turno_traducido)
-        #st.session_state.get("turno_idx", 0)
-        #st.session_state["turno_idx"] = ["Turno 1", "Turno 2", "Turno 3"].index(turno)
-
     # --- Tipo o rango de fechas según modo ---
-    tipo, start, end = None, None, None
-    with col4:
-        if modo == "registro":
-            tipo = st.radio(
-                t("Tipo de registro"),
-                options=["Check-in", "Check-out"], horizontal=True,
-                index=0 
-            )
-            #if st.session_state.get("tipo") is None else ["Check-in", "Check-out"].index(st.session_state["tipo"])
-            #st.session_state["tipo"] = tipo
+    start, end = None, None
+    with col3:
+        # modo == "reporte"
+        hoy = datetime.date.today()
+        hace_15_dias = hoy - datetime.timedelta(days=15)
 
-        else:  # modo == "reporte"
-            hoy = datetime.date.today()
-            hace_15_dias = hoy - datetime.timedelta(days=15)
+        start_default = hace_15_dias 
+        end_default = hoy
 
-            start_default = hace_15_dias 
-            end_default = hoy
-
-            start, end = get_date_range_input(t("Rango de fechas"), start_default=start_default, end_default=end_default)
+        start, end = get_date_range_input(t("Rango de fechas"), start_default=start_default, end_default=end_default)
 
     if modo == "registro":
-        return jugadora_opt, tipo, turno
+        return jugadora_opt
     
     # ==================================================
     # 🧮 FILTRADO DEL DATAFRAME
@@ -127,19 +106,16 @@ def selection_header(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd
     df_filtrado = filtrar_registros(
         records_df,
         jugadora_opt=jugadora_opt,
-        turno=turno,
         modo=modo,
-        tipo=tipo,   # solo si modo="registros"
         start=start,
         end=end,
     )
 
-    return df_filtrado, jugadora_opt, tipo, turno, start, end
+    return df_filtrado, jugadora_opt, start, end
 
 def filtrar_registros(
     records_df: pd.DataFrame,
     jugadora_opt: dict | None = None,
-    turno: str = "Todos",
     modo: str = "registros",
     tipo: str | None = None,
     start=None,
@@ -171,14 +147,8 @@ def filtrar_registros(
     # -------------------------
     if jugadora_opt:
         df_filtrado = df_filtrado[
-            df_filtrado["id_jugadora"] == jugadora_opt["id_jugadora"]
+            df_filtrado["identificacion"] == jugadora_opt["identificacion"]
         ]
-
-    # -------------------------
-    # Filtrar por turno
-    # -------------------------
-    if turno != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["turno"] == turno]
 
     # -------------------------
     # MODO: registros
@@ -238,26 +208,8 @@ def filtrar_registros(
 
     return df_filtrado
 
-def get_checkins(records_df, turno: str, fecha):
-    """Devuelve array de id_jugadora con CHECK-IN en la fecha y turno indicados."""
-    return records_df[
-        (records_df["tipo"] == "checkin") &
-        (records_df["turno"] == turno.lower()) &
-        (records_df["fecha_sesion"] == fecha)
-    ]["id_jugadora"].unique()
-
-def get_checkouts(records_df, turno: str, fecha):
-    """Devuelve array de id_jugadora con CHECK-OUT en la fecha y turno indicados."""
-    return records_df[
-        (records_df["tipo"] == "checkout") &
-        (records_df["turno"] == turno.lower()) &
-        (records_df["fecha_sesion"] == fecha)
-    ]["id_jugadora"].unique()
-
 def preview_record(record: dict) -> None:
-    #st.subheader("Previsualización")
-    # Header with key fields
-    jug = record.get("id_jugadora", "-")
+    jug = record.get("identificacion", "-")
     fecha = record.get("fecha_sesion", "-")
     turno = record.get("turno", "-")
     tipo = record.get("tipo", "-")
@@ -265,130 +217,144 @@ def preview_record(record: dict) -> None:
     with st.expander("Ver registro JSON", expanded=True):
         st.code(json.dumps(record, ensure_ascii=False, indent=2), language="json")
 
-def selection_header_registro(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd.DataFrame = None):
-    session_id = st.session_state["client_session_id"]
+def load_posiciones_traducidas() -> dict:
+    return {key: t(valor_es) for key, valor_es in MAP_POSICIONES.items()}
 
-    col_tipo, col_turno, col_plantel, col_jugadora = st.columns([1.6, 1, 2, 2])
+def selection_header_registro(
+    jug_df: pd.DataFrame,
+    comp_df: pd.DataFrame,
+    records_df: pd.DataFrame | None = None
+):
+    """
+    Header Antropometría:
+    Plantel → Posición → Jugadora
 
-    # 1) Tipo
-    with col_tipo:
-        opciones_tipo = ["Check-in", "Check-out"]
-        tipo = st.radio(
-            t("Tipo de registro"),
-            options=opciones_tipo,
-            horizontal=True,
-            index=opciones_tipo.index(st.session_state.get("tipo_registro", "Check-in")),
-            key=f"tipo_registro__{session_id}"
-        )
-        st.session_state["tipo_registro"] = tipo
+    Si records_df está disponible:
+      - excluye jugadoras que YA tienen registro en fecha_objetivo (por defecto: hoy)
+    """
 
-    # 2) Turno
-    with col_turno:
-        opciones = list(OPCIONES_TURNO.values())[1:]
-        turno_traducido = st.selectbox(
-            t("Turno"),
-            opciones,
-            index=opciones.index(st.session_state.get("turno_select", opciones[0])),
-            key=f"turno_select__{session_id}"
-        )
-        turno = next(k for k, v in OPCIONES_TURNO.items() if v == turno_traducido)
-        st.session_state["turno_select"] = turno
+    session_id = st.session_state.get("client_session_id", "default")
+    fecha_objetivo = datetime.date.today()
 
-    # 3) Plantel
-    with col_plantel:
+    col1, col2, col3 = st.columns([2, 1.5, 2])
+
+    # ======================================================
+    # 1) PLANTEL
+    # ======================================================
+    with col1:
         comp_options = comp_df.to_dict("records")
-        comp_select = st.selectbox(
+        competicion = st.selectbox(
             t("Plantel"),
             options=comp_options,
-            format_func=lambda x: x["nombre"],
+            format_func=lambda x: f'{x["nombre"]} ({x["codigo"]})',
+            placeholder=t("Seleccione un plantel"),
             index=3,
-            key=f"plantel_select__{session_id}"
+            key=f"plantel_antropometria__{session_id}"
         )
-        codigo_comp = comp_select["codigo"]
 
-    # Context key (ESTABLE) para selección de jugadora
-    # IMPORTANTE: incluye session_id + plantel + tipo + turno
-    ctx_key = f"{session_id}__{codigo_comp}__{tipo.lower()}__{str(turno).lower()}"
+    # ======================================================
+    # 2) POSICIÓN
+    # ======================================================
+    with col2:
+        MAP_POSICIONES_TRADUCIDAS = load_posiciones_traducidas()
+        MAP_POSICIONES_INVERTIDO = {v: k for k, v in MAP_POSICIONES_TRADUCIDAS.items()}
 
-    # Keys estables del widget
-    widget_key_jugadora = f"jugadora_select__{ctx_key}"
-    state_key_locked = f"last_player_id__{ctx_key}"
+        posicion_traducida = st.selectbox(
+            t("Posición"),
+            options=list(MAP_POSICIONES_TRADUCIDAS.values()),
+            placeholder=t("Seleccione una posición"),
+            index=None,
+            key=f"posicion_antropometria__{session_id}"
+        )
 
-    # 4) Jugadoras filtradas
-    with col_jugadora:
-        jug_df_filtrado = jug_df[jug_df["plantel"] == codigo_comp].copy()
+        clave = MAP_POSICIONES_INVERTIDO.get(posicion_traducida)
+        posicion = MAP_POSICIONES.get(clave)
 
+        # reset jugadora si cambia filtro
+        filtro_actual = (competicion["codigo"] if competicion else None, posicion)
+        if st.session_state.get("last_filtro_jugadora_antropo") != filtro_actual:
+            st.session_state.pop("jugadora_antropometria", None)
+            st.session_state["last_filtro_jugadora_antropo"] = filtro_actual
+
+    # ======================================================
+    # 3) JUGADORA (con exclusión por fecha)
+    # ======================================================
+    with col3:
+        # Base filtrada por plantel/posición
+        if competicion:
+            codigo_comp = competicion["codigo"]
+            jug_df_filtrado = jug_df[jug_df["plantel"] == codigo_comp].copy()
+        else:
+            jug_df_filtrado = jug_df.copy()
+
+        if posicion:
+            jug_df_filtrado = jug_df_filtrado[jug_df_filtrado["posicion"] == posicion]
+
+        # --- Excluir jugadoras que ya tienen registro hoy (fecha_objetivo) ---
         if records_df is not None and not records_df.empty:
-            df = records_df.copy()
-            df["tipo"] = df["tipo"].astype(str).str.lower()
-            df["turno"] = df["turno"].astype(str).str.lower()
+            df_r = records_df.copy()
 
-            hoy = datetime.date.today()
-            checkins = get_checkins(df, turno, hoy)
-            checkouts = get_checkouts(df, turno, hoy)
-
-            if tipo.lower() == "check-in":
-                excluir = set(checkins).union(set(checkouts))
-                jug_df_filtrado = jug_df_filtrado[~jug_df_filtrado["id_jugadora"].isin(excluir)]
+            # Asegurar fecha como date
+            if "fecha_sesion" in df_r.columns:
+                df_r["fecha_sesion"] = pd.to_datetime(df_r["fecha_sesion"], errors="coerce").dt.date
+            elif "fecha_hora_registro" in df_r.columns:
+                df_r["fecha_sesion"] = pd.to_datetime(df_r["fecha_hora_registro"], errors="coerce").dt.date
             else:
-                mostrar = set(checkins) - set(checkouts)
-                jug_df_filtrado = jug_df_filtrado[jug_df_filtrado["id_jugadora"].isin(mostrar)]
+                df_r["fecha_sesion"] = None
+
+            ids_registrados = set(
+                df_r[df_r["fecha_sesion"] == fecha_objetivo]["identificacion"].astype(str).unique()
+            )
+
+            # En jug_df la columna suele ser "identificacion"
+            if "identificacion" in jug_df_filtrado.columns:
+                jug_df_filtrado = jug_df_filtrado[
+                    ~jug_df_filtrado["identificacion"].astype(str).isin(ids_registrados)
+                ]
 
         if jug_df_filtrado.empty:
-            st.session_state[state_key_locked] = None
-            st.session_state[widget_key_jugadora] = None
-            st.error(f"No hay jugadoras disponibles para registrar {tipo}")
-            st.stop()
+            st.error(t("No hay jugadoras disponibles para registrar en la fecha seleccionada"))
+            return None, posicion, pd.DataFrame()
 
-        jugadoras = jug_df_filtrado.to_dict("records")
-        map_jugadoras = {str(j["id_jugadora"]): j for j in jugadoras}
-        opciones_ids = list(map_jugadoras.keys())
-
-        # --- PRESELECCIÓN ROBUSTA ---
-        # 1) preferir locked_id si existe y es válido
-        locked_id = st.session_state.get(state_key_locked)
-        if locked_id not in opciones_ids:
-            locked_id = None
-
-        # 2) si widget tiene valor previo, usarlo si sigue válido
-        widget_prev = st.session_state.get(widget_key_jugadora)
-        if widget_prev in opciones_ids:
-            default_id = widget_prev
-        elif locked_id in opciones_ids:
-            default_id = locked_id
-        else:
-            #print("no hay nada valido")
-            default_id = opciones_ids[0]  # fallback solo si no hay nada válido
-
-        # sincroniza estado del widget antes de renderizar para evitar "vacío"
-        st.session_state[widget_key_jugadora] = default_id
-
-        # index coherente (sin placeholder que produzca None)
-        default_index = opciones_ids.index(default_id)
-
-        jugadora_labels = {
-            jug_id: f"{i + 1} - {map_jugadoras[jug_id]['nombre_jugadora']}"
-            for i, jug_id in enumerate(opciones_ids)
-        }
-
-        jugadora_id = st.selectbox(
-            t("Jugadora"),
-            options=opciones_ids,
-            #format_func=lambda x: map_jugadoras[x]["nombre_jugadora"],
-            format_func=lambda x: jugadora_labels[x],
-            index=None, #default_index,
-            key=widget_key_jugadora
+        # Lista estable de nombres
+        jugadora_nombres = (
+            jug_df_filtrado["nombre_jugadora"]
+            .astype(str)
+            .sort_values()
+            .tolist()
         )
 
-        jugadora_header = map_jugadoras.get(jugadora_id)
+        jugadora_labels = {
+            nombre: f"{i + 1} - {nombre}"
+            for i, nombre in enumerate(jugadora_nombres)
+        }
 
-    # Resolver final (bloqueo por contexto)
-    jugadora_final = resolver_jugadora_final(
-        jugadora_header=jugadora_header,
-        jug_df_filtrado=jug_df_filtrado,
-        jug_df=jug_df,
-        tipo=tipo,
-        ctx_key=ctx_key
-    )
+        jugadora_index = None
+        if (
+            "jugadora_antropometria" in st.session_state
+            and st.session_state["jugadora_antropometria"] in jugadora_nombres
+        ):
+            jugadora_index = jugadora_nombres.index(st.session_state["jugadora_antropometria"])
 
-    return jugadora_final, tipo, turno, jug_df_filtrado
+        jugadora_nombre = st.selectbox(
+            t("Jugadora"),
+            options=jugadora_nombres,
+            index=jugadora_index,
+            format_func=lambda x: jugadora_labels[x],
+            placeholder=t("Seleccione una jugadora"),
+            key=f"jugadora_antropometria__{session_id}"
+        )
+
+        # Persistir selección
+        if jugadora_nombre:
+            st.session_state["jugadora_antropometria"] = jugadora_nombre
+        else:
+            st.session_state.pop("jugadora_antropometria", None)
+
+        jugadora_seleccionada = None
+        if "jugadora_antropometria" in st.session_state:
+            jugadora_seleccionada = jug_df_filtrado[
+                jug_df_filtrado["nombre_jugadora"].astype(str) == st.session_state["jugadora_antropometria"]
+            ].iloc[0].to_dict()
+
+    return jugadora_seleccionada

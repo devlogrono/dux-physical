@@ -46,41 +46,53 @@ def compute_player_template_means(df_in_period_checkin: pd.DataFrame) -> pd.Data
 # 📅 GESTIÓN DE PERIODOS
 # ============================================================
 
-def get_default_period(df: pd.DataFrame) -> str:
+# def get_default_period(df: pd.DataFrame) -> str:
 
-    hoy = date.today()
-    dias_disponibles = df["fecha_dia"].unique()
-    if hoy in dias_disponibles:
-        return "Hoy"
-    elif (hoy - timedelta(days=1)) in dias_disponibles:
-        return "Último día"
-    elif any((hoy - timedelta(days=i)) in dias_disponibles for i in range(2, 8)):
-        return "Semana"
-    else:
-        return "Mes"
+#     hoy = date.today()
+#     dias_disponibles = df["fecha_dia"].unique()
+#     if hoy in dias_disponibles:
+#         return "Hoy"
+#     elif (hoy - timedelta(days=1)) in dias_disponibles:
+#         return "Último día"
+#     elif any((hoy - timedelta(days=i)) in dias_disponibles for i in range(2, 8)):
+#         return "Semana"
+#     else:
+#         return "Mes"
 
 def filter_df_by_period(df: pd.DataFrame, periodo: str):
-    fecha_max = df["fecha_sesion"].max()
+    """
+    Filtro de periodos adaptado a antropometría:
+    - Última sesión: última medición por jugadora
+    - Histórico: últimos 6 meses
+    """
 
-    if periodo == "Hoy":
-        filtro = df["fecha_dia"] == date.today()
-        texto = t("el día de hoy")
-    elif periodo == "Último día":
-        filtro = df["fecha_dia"] == fecha_max
-        texto = t("el último día")
-    elif periodo == "Semana":
-        filtro = df["fecha_sesion"] >= (fecha_max - pd.Timedelta(days=7))
-        texto = t("la última semana")
-    else:
-        filtro = df["fecha_sesion"] >= (fecha_max - pd.Timedelta(days=30))
-        texto = t("el último mes")
+    if df.empty:
+        return df.copy(), ""
 
-    # --- Aplicar filtro ---
-    df_filtrado = df[filtro].copy()
+    if periodo == "Última sesión":
+        df_sorted = df.sort_values("fecha_sesion")
+        df_filtrado = (
+            df_sorted
+            .groupby("identificacion", as_index=False)
+            .tail(1)
+            .reset_index(drop=True)
+        )
+        texto = t("última sesión")
 
-    # --- Ordenar por fecha (más reciente primero) ---
-    df_filtrado = df_filtrado.sort_values(by="fecha_sesion", ascending=False).reset_index(drop=True)
-    df_filtrado.drop(columns=["id"], inplace=True)
+    else:  # Histórico (6 meses)
+        fecha_max = df["fecha_sesion"].max()
+        df_filtrado = df[
+            df["fecha_sesion"] >= (fecha_max - pd.Timedelta(days=180))
+        ].copy()
+        texto = t("últimos 6 meses")
+
+    # Orden final
+    df_filtrado = df_filtrado.sort_values(
+        by="fecha_sesion", ascending=False
+    ).reset_index(drop=True)
+
+    # Limpieza segura
+    df_filtrado.drop(columns=["id"], errors="ignore", inplace=True)
 
     return df_filtrado, texto
 
@@ -142,14 +154,14 @@ def calc_alertas(df_periodo: pd.DataFrame, df_completo: pd.DataFrame, periodo: s
         riesgo_df = compute_player_template_means(base_df)
         if riesgo_df.empty or "en_riesgo" not in riesgo_df.columns:
             alertas_count = 0
-            total_jugadoras = len(base_df["id_jugadora"].unique())
+            total_jugadoras = len(base_df["identificacion"].unique())
         else:
             alertas_count = int(riesgo_df["en_riesgo"].sum())
             total_jugadoras = int(riesgo_df.shape[0])
     except Exception as e:
         st.warning(f"No se pudo calcular el riesgo: {e}")
         alertas_count = 0
-        total_jugadoras = len(base_df["id_jugadora"].unique())
+        total_jugadoras = len(base_df["identificacion"].unique())
 
     alertas_pct = round((alertas_count / total_jugadoras) * 100, 1) if total_jugadoras > 0 else 0
 
@@ -163,91 +175,60 @@ def calc_alertas(df_periodo: pd.DataFrame, df_completo: pd.DataFrame, periodo: s
 # 💠 TARJETAS DE MÉTRICAS
 # ============================================================
 
-def render_metric_cards(template_prom, delta_template, chart_template, rpe_prom, delta_rpe, chart_rpe, ua_total, 
-delta_ua, chart_ua, alertas_count, total_jugadoras, alertas_pct, chart_alertas, delta_alertas, articulo):
+def render_metric_cards(
+    peso_prom, delta_peso, chart_peso,
+    grasa_prom, delta_grasa, chart_grasa,
+    musculo_prom, delta_musculo, chart_musculo,
+    indice_mo_prom, delta_indice_mo, chart_indice_mo,
+    articulo
+):
     col1, col2, col3, col4 = st.columns(4)
+
     with col1:
         st.metric(
-            t("Bienestar promedio del grupo"),
-            f"{template_prom if not pd.isna(template_prom) else 0}/25",
-            f"{delta_template:+.1f}%",
-            chart_data=chart_template,
-            chart_type="area",
-            border=True,
-            help=f"{t('Promedio de bienestar global')} ({articulo})."
-        )
-    with col2:
-        st.metric(
-            t("Esfuerzo percibido promedio (RPE)"),
-            f"{rpe_prom if not pd.isna(rpe_prom) else 0}",
-            f"{delta_rpe:+.1f}%",
-            chart_data=chart_rpe,
+            t("Peso medio del grupo"),
+            f"{peso_prom:.1f} kg" if not pd.isna(peso_prom) else "0 kg",
+            f"{delta_peso:+.1f}%",
+            chart_data=chart_peso,
             chart_type="line",
             border=True,
-            delta_color="inverse"
+            help=f"{t('Promedio de peso corporal del grupo')} ({articulo})."
         )
-    with col3:
+
+    with col2:
         st.metric(
-            t("Carga interna total (UA)"),
-            ua_total,
-            f"{delta_ua:+.1f}%",
-            chart_data=chart_ua,
+            t("Porcentaje de grasa medio"),
+            f"{grasa_prom:.1f} %" if not pd.isna(grasa_prom) else "0 %",
+            f"{delta_grasa:+.1f}%",
+            chart_data=chart_grasa,
             chart_type="area",
-            border=True
-        )
-    with col4:
-        st.metric(
-            t("Jugadoras en Zona Roja"),
-            f"{alertas_count}/{total_jugadoras}",
-            f"{delta_alertas:+.1f}%",
-            chart_data=chart_alertas,
-            chart_type="bar",
             border=True,
             delta_color="inverse",
-            help=f"{alertas_count} {t('de')} {total_jugadoras} {t('jugadoras')} ({alertas_pct}%) "
-                 f"{t('con bienestar promedio <15 o dolor >3')} ({articulo})."
+            help=f"{t('Promedio de grasa corporal del grupo')} ({articulo})."
         )
 
-# def mostrar_resumen_tecnico(template_prom: float, rpe_prom: float, ua_total: float,
-#                             alertas_count: int, total_jugadoras: int):
-#     """
-#     Muestra en pantalla el resumen técnico del grupo, con interpretación automática
-#     del estado de bienestar, esfuerzo percibido y riesgo de alerta.
-#     """
+    with col3:
+        st.metric(
+            t("Porcentaje muscular medio"),
+            f"{musculo_prom:.1f} %" if not pd.isna(musculo_prom) else "0 %",
+            f"{delta_musculo:+.1f}%",
+            chart_data=chart_musculo,
+            chart_type="area",
+            border=True,
+            help=f"{t('Promedio de masa muscular del grupo')} ({articulo})."
+        )
 
-#     # 🟢 Estado de bienestar (escala 25)
-#     estado_bienestar = (
-#         "óptimo" if template_prom > 20 else
-#         "moderado" if template_prom >= 15 else
-#         "en fatiga"
-#     )
+    with col4:
+        st.metric(
+            t("Índice músculo / óseo medio"),
+            f"{indice_mo_prom:.2f}" if not pd.isna(indice_mo_prom) else "0",
+            f"{delta_indice_mo:+.1f}%",
+            chart_data=chart_indice_mo,
+            chart_type="line",
+            border=True,
+            help=f"{t('Relación promedio entre masa muscular y masa ósea del grupo')} ({articulo})."
+        )
 
-#     # 🟡 Nivel de esfuerzo percibido (RPE)
-#     if pd.isna(rpe_prom) or rpe_prom == 0:
-#         nivel_rpe = "sin datos"
-#     elif rpe_prom < 5:
-#         nivel_rpe = "bajo"
-#     elif rpe_prom <= 7:
-#         nivel_rpe = "moderado"
-#     else:
-#         nivel_rpe = "alto"
-
-#     # 🔴 Estado de alertas
-#     if alertas_count == 0:
-#         estado_alertas = "sin jugadoras en zona roja"
-#     elif alertas_count == 1:
-#         estado_alertas = "1 jugadora en seguimiento"
-#     else:
-#         estado_alertas = f"{alertas_count} jugadoras en zona roja"
-
-#     # 🧾 Resumen técnico mostrado en Streamlit
-#     st.markdown(
-#         f":material/description: **Resumen técnico:** El grupo muestra un estado de bienestar **{estado_bienestar}** "
-#         f"({template_prom}/25) con un esfuerzo percibido **{nivel_rpe}** (RPE {rpe_prom}). "
-#         f"La carga interna total es de **{ua_total} UA** y actualmente hay **{estado_alertas}**, "
-#         f"debido a que el **(promedio de bienestar x 5) < 15 puntos** (escala 25), "
-#         f"indicando **fatiga, sobrecarga o molestias significativas** que aumentan el riesgo de lesión o bajo rendimiento."
-#     )
 
 def mostrar_resumen_tecnico(template_prom: float, rpe_prom: float, ua_total: float,
                             alertas_count: int, total_jugadoras: int):
@@ -535,84 +516,3 @@ def generar_resumen_periodo(df: pd.DataFrame):
 
     st.dataframe(styled, hide_index=True)
 
-    # st.caption(
-    #     ":material/info: **Criterio de riesgo en la tabla:** "
-    #     "una jugadora se considera *en riesgo* si el **promedio de bienestar (1-5x5) < 15 puntos** "
-    #     "o si la variable **Dolor > 3**. "
-    #     "Este criterio combina el **riesgo global** (fatiga / bienestar bajo) y el **riesgo localizado** (molestias o dolor elevado)."
-    # )
-
-    #st.caption(t(":material/info: **Criterio de riesgo en la tabla:** una jugadora se considera *en riesgo* si el **promedio de bienestar (1-5x5) < 15 puntos** o si la variable **Dolor > 3**. Este criterio combina el **riesgo global** (fatiga / bienestar bajo) y el **riesgo localizado** (molestias o dolor elevado)."))
-
-
-def _filtrar_pendientes(df_periodo: pd.DataFrame, df_jugadoras: pd.DataFrame, tipo: str) -> pd.DataFrame:
-    """
-    Devuelve las jugadoras que no han realizado un tipo de registro específico
-    (checkin o checkout) en el periodo seleccionado.
-
-    Lógica:
-        - Si una jugadora tiene checkout → se asume que también hizo checkin.
-        - Si tiene checkin pero no checkout → pendiente de checkout.
-        - Si no tiene ninguno → pendiente en ambos lados.
-
-    Parámetros:
-        df_periodo (pd.DataFrame): DataFrame de registros.
-        df_jugadoras (pd.DataFrame): Lista completa de jugadoras.
-        tipo (str): 'checkin' o 'checkout'.
-
-    Retorna:
-        pd.DataFrame: Jugadoras pendientes, con columnas filtradas y ordenadas.
-    """
-    tipo = tipo.lower().strip()
-
-    # --- Normalizar columna tipo ---
-    df_periodo = df_periodo.copy()
-    df_periodo["tipo"] = df_periodo["tipo"].astype(str).str.lower()
-
-    # --- IDs según tipo ---
-    ids_checkin = df_periodo[df_periodo["tipo"] == "checkin"]["id_jugadora"].unique()
-    ids_checkout = df_periodo[df_periodo["tipo"] == "checkout"]["id_jugadora"].unique()
-
-    # --- Lógica principal ---
-    if tipo == "checkin":
-        # Pendiente de checkin → jugadoras sin ningún registro
-        pendientes_ids = [jid for jid in df_jugadoras["id_jugadora"].unique()
-                          if jid not in ids_checkin and jid not in ids_checkout]
-    else:  # tipo == "checkout"
-        # Pendiente de checkout → jugadoras con checkin pero sin checkout
-        pendientes_ids = [jid for jid in df_jugadoras["id_jugadora"].unique()
-                          if jid in ids_checkin and jid not in ids_checkout
-                          or (jid not in ids_checkin and jid not in ids_checkout)]
-
-    # --- Filtrar jugadoras ---
-    pendientes = df_jugadoras[df_jugadoras["id_jugadora"].isin(pendientes_ids)].copy()
-
-    # --- Ordenar ---
-    pendientes = ordenar_df(pendientes, "nombre_jugadora")
-
-    # --- Seleccionar columnas finales ---
-    columnas_finales = ["id_jugadora", "nombre_jugadora", "posicion", "plantel"]
-    pendientes = pendientes[[c for c in columnas_finales if c in pendientes.columns]]
-
-    return pendientes
-
-def get_pendientes_check(df_periodo: pd.DataFrame, df_jugadoras: pd.DataFrame):
-    """
-    Devuelve dos DataFrames:
-    - Jugadoras sin check-in
-    - Jugadoras sin check-out
-    """
-    if "id_jugadora" not in df_periodo.columns or "id_jugadora" not in df_jugadoras.columns:
-        return pd.DataFrame(), pd.DataFrame()
-
-    #st.dataframe(df_periodo)
-
-    df_periodo = df_periodo.copy()
-    # --- Normalizar columna tipo ---
-    df_periodo["tipo"] = df_periodo["tipo"].astype(str).str.lower()
-
-    # --- Obtener pendientes con la función auxiliar ---
-    pendientes_in = _filtrar_pendientes(df_periodo, df_jugadoras, "checkin")
-    pendientes_out = _filtrar_pendientes(df_periodo, df_jugadoras, "checkout")
-
-    return pendientes_in, pendientes_out
