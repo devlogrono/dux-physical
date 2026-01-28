@@ -9,29 +9,22 @@ config.init_config()
 from modules.auth_system.auth_core import init_app_state, validate_login
 from modules.i18n.i18n import t
 from modules.db.db_records import get_records_db
-from modules.db.db_catalogs import load_catalog_list_db
 
 from modules.ui.ui_components import selection_header_registro
-from modules.ui.records_ui import records_form
+from modules.ui.ui_records import records_form
 
 # Authentication gate
 init_app_state()
 is_valid = validate_login()
 
-##:red[:material/check_in_out:]
 st.header(t("Registro"), divider="red")
+
 
 # Load reference data
 records_df = get_records_db()
 jug_df = load_players_db()
 comp_df = load_competitions_db()
 
-jugadora = selection_header_registro(jug_df, comp_df, records_df)
-st.divider()
+jugadora, posicion, record_df, tipo = selection_header_registro(jug_df, comp_df, records_df)
 
-if st.session_state.get("submitted"):
-    st.session_state["submitted"] = False
-
-#st.dataframe(jugadora)
-records_form(jugadora)
-    
+records_form(jugadora, record_df, tipo)

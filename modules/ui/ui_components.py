@@ -1,3 +1,5 @@
+from decimal import Decimal
+from typing import Any
 import pandas as pd
 import streamlit as st
 import datetime
@@ -5,8 +7,9 @@ import json
 from modules.util.key_builder import KeyBuilder
 from modules.util.util import get_date_range_input
 from modules.i18n.i18n import t
-from modules.schema import MAP_POSICIONES, OPCIONES_TURNO
+from modules.schema import MAP_POSICIONES
 from modules.util.key_builder import KeyBuilder
+from modules.util.util import load_posiciones_traducidas
 
 def selection_header(jug_df: pd.DataFrame, comp_df: pd.DataFrame, records_df: pd.DataFrame = None, modo: str = "registro") -> pd.DataFrame:
     """
@@ -208,18 +211,6 @@ def filtrar_registros(
 
     return df_filtrado
 
-def preview_record(record: dict) -> None:
-    jug = record.get("identificacion", "-")
-    fecha = record.get("fecha_sesion", "-")
-    turno = record.get("turno", "-")
-    tipo = record.get("tipo", "-")
-    st.markdown(f"**Jugadora:** {jug}  |  **Fecha:** {fecha}  |  **Turno:** {turno}  |  **Tipo:** {tipo}")
-    with st.expander("Ver registro JSON", expanded=True):
-        st.code(json.dumps(record, ensure_ascii=False, indent=2), language="json")
-
-def load_posiciones_traducidas() -> dict:
-    return {key: t(valor_es) for key, valor_es in MAP_POSICIONES.items()}
-
 def selection_header_registro(
     jug_df: pd.DataFrame,
     comp_df: pd.DataFrame,
@@ -229,20 +220,27 @@ def selection_header_registro(
     Header Antropometría:
     Plantel → Posición → Jugadora
 
-    Si records_df está disponible:
-      - excluye jugadoras que YA tienen registro en fecha_objetivo (por defecto: hoy)
+    Responsabilidad:
+    - Filtrar jugadoras
+    - Resolver jugadora seleccionada
+    - Filtrar cabeceras ISAK (antropometria_isak) de esa jugadora
+
+    Devuelve:
+        - jugadora_seleccionada (dict | None)
+        - posicion (str | None)
+        - df_isak_jugadora (DataFrame | None)
     """
 
     session_id = st.session_state.get("client_session_id", "default")
-    fecha_objetivo = datetime.date.today()
 
-    col1, col2, col3 = st.columns([2, 1.5, 2])
+    col1, col2, col3, col4 = st.columns([2, 1, 2, 1.5])
 
     # ======================================================
     # 1) PLANTEL
     # ======================================================
     with col1:
         comp_options = comp_df.to_dict("records")
+
         competicion = st.selectbox(
             t("Plantel"),
             options=comp_options,
@@ -270,17 +268,17 @@ def selection_header_registro(
         clave = MAP_POSICIONES_INVERTIDO.get(posicion_traducida)
         posicion = MAP_POSICIONES.get(clave)
 
-        # reset jugadora si cambia filtro
+        # Reset jugadora si cambia filtro
         filtro_actual = (competicion["codigo"] if competicion else None, posicion)
         if st.session_state.get("last_filtro_jugadora_antropo") != filtro_actual:
             st.session_state.pop("jugadora_antropometria", None)
             st.session_state["last_filtro_jugadora_antropo"] = filtro_actual
 
     # ======================================================
-    # 3) JUGADORA (con exclusión por fecha)
+    # 3) JUGADORA
     # ======================================================
     with col3:
-        # Base filtrada por plantel/posición
+        # --- Filtrado base ---
         if competicion:
             codigo_comp = competicion["codigo"]
             jug_df_filtrado = jug_df[jug_df["plantel"] == codigo_comp].copy()
@@ -290,33 +288,11 @@ def selection_header_registro(
         if posicion:
             jug_df_filtrado = jug_df_filtrado[jug_df_filtrado["posicion"] == posicion]
 
-        # --- Excluir jugadoras que ya tienen registro hoy (fecha_objetivo) ---
-        if records_df is not None and not records_df.empty:
-            df_r = records_df.copy()
-
-            # Asegurar fecha como date
-            if "fecha_sesion" in df_r.columns:
-                df_r["fecha_sesion"] = pd.to_datetime(df_r["fecha_sesion"], errors="coerce").dt.date
-            elif "fecha_hora_registro" in df_r.columns:
-                df_r["fecha_sesion"] = pd.to_datetime(df_r["fecha_hora_registro"], errors="coerce").dt.date
-            else:
-                df_r["fecha_sesion"] = None
-
-            ids_registrados = set(
-                df_r[df_r["fecha_sesion"] == fecha_objetivo]["identificacion"].astype(str).unique()
-            )
-
-            # En jug_df la columna suele ser "identificacion"
-            if "identificacion" in jug_df_filtrado.columns:
-                jug_df_filtrado = jug_df_filtrado[
-                    ~jug_df_filtrado["identificacion"].astype(str).isin(ids_registrados)
-                ]
-
         if jug_df_filtrado.empty:
-            st.error(t("No hay jugadoras disponibles para registrar en la fecha seleccionada"))
-            return None, posicion, pd.DataFrame()
+            st.error(t("No hay jugadoras disponibles con los filtros seleccionados"))
+            return None, posicion, None
 
-        # Lista estable de nombres
+        # --- Lista estable de nombres ---
         jugadora_nombres = (
             jug_df_filtrado["nombre_jugadora"]
             .astype(str)
@@ -329,32 +305,68 @@ def selection_header_registro(
             for i, nombre in enumerate(jugadora_nombres)
         }
 
-        jugadora_index = None
-        if (
-            "jugadora_antropometria" in st.session_state
-            and st.session_state["jugadora_antropometria"] in jugadora_nombres
-        ):
-            jugadora_index = jugadora_nombres.index(st.session_state["jugadora_antropometria"])
-
         jugadora_nombre = st.selectbox(
             t("Jugadora"),
             options=jugadora_nombres,
-            index=jugadora_index,
+            index=None,
             format_func=lambda x: jugadora_labels[x],
-            placeholder=t("Seleccione una jugadora"),
-            key=f"jugadora_antropometria__{session_id}"
+            placeholder=t("Seleccione una jugadora")
         )
 
-        # Persistir selección
-        if jugadora_nombre:
-            st.session_state["jugadora_antropometria"] = jugadora_nombre
-        else:
-            st.session_state.pop("jugadora_antropometria", None)
-
+        # ==================================================
+        # Resultado final
+        # ==================================================
         jugadora_seleccionada = None
-        if "jugadora_antropometria" in st.session_state:
+        df_isak_jugadora = None
+
+        if jugadora_nombre:
             jugadora_seleccionada = jug_df_filtrado[
-                jug_df_filtrado["nombre_jugadora"].astype(str) == st.session_state["jugadora_antropometria"]
+                jug_df_filtrado["nombre_jugadora"].astype(str) == jugadora_nombre
             ].iloc[0].to_dict()
 
-    return jugadora_seleccionada
+            if records_df is not None and not records_df.empty:
+                jugadora_id = str(jugadora_seleccionada.get("identificacion"))
+                df_isak_jugadora = records_df[
+                    records_df["identificacion"].astype(str) == jugadora_id
+                ].copy()
+
+    with col4:
+        opciones_tipo = ["Formulario", "Archivo"]
+        tipo = st.radio(
+            t("Tipo de registro"),
+            options=opciones_tipo,
+            horizontal=True,
+            index=opciones_tipo.index(st.session_state.get("tipo_registro", "Formulario")),
+            key=f"tipo_registro__{session_id}"
+        )
+
+    return jugadora_seleccionada, posicion, df_isak_jugadora, tipo.lower()
+
+#######################################
+#######################################
+
+def normalize_for_ui(obj: Any) -> Any:
+    """
+    Convierte Decimal → float y procesa estructuras anidadas
+    para visualización / JSON / Streamlit.
+    """
+    if isinstance(obj, Decimal):
+        return float(obj)
+
+    if isinstance(obj, dict):
+        return {k: normalize_for_ui(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        return [normalize_for_ui(v) for v in obj]
+
+    return obj
+
+def preview_record(record: dict) -> None:
+    jug = record.get("id_jugadora", "-")
+    fecha = record.get("fecha_sesion", "-")
+    #turno = record.get("turno", "-")
+    tipo = record.get("tipo_isak", "-")
+    st.markdown(f"**Jugadora:** {jug}  |  **Fecha:** {fecha} |  **Tipo:** {tipo}")
+    with st.expander("Ver registro JSON", expanded=True):
+        record_ui = normalize_for_ui(record)
+        st.code(json.dumps(record_ui, ensure_ascii=False, indent=2), language="json")

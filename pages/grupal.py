@@ -3,6 +3,7 @@ import streamlit as st
 import modules.app_config.config as config
 
 from modules.i18n.i18n import t
+from modules.util.db_util import get_isak
 
 config.init_config()
 
@@ -17,11 +18,11 @@ st.header(t("Análisis :red[grupal]"), divider="red")
 # Load reference data
 jug_df = load_players_db()
 comp_df = load_competitions_db()
-records_df = get_records_db()
-
+#records_df = get_records_db()
+df_records = get_isak()
 #st.dataframe(template_df, hide_index=True)    
 
-df_filtrado, jugadora, start, end = selection_header(jug_df, comp_df, records_df, modo="reporte_grupal")
+df_filtrado, jugadora, start, end = selection_header(jug_df, comp_df, df_records, modo="reporte_grupal")
 
 #st.dataframe(df, hide_index=True)
 group_dashboard(df_filtrado)

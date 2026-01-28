@@ -22,7 +22,7 @@ def metricas(df: pd.DataFrame) -> None:
         st.info(t("No hay registros en el periodo seleccionado."))
         return
 
-    df = df.sort_values("fecha_sesion")
+    df = df.sort_values("fecha_medicion")
 
     ultimo = df.iloc[-1]
 
@@ -35,13 +35,13 @@ def metricas(df: pd.DataFrame) -> None:
     k1, k2, k3, k4, k5, k6 = st.columns(6)
 
     with k1:
-        st.metric(t("Peso (kg)"), _fmt(ultimo.get("peso_kg"), "kg"))
+        st.metric(t("Peso (kg)"), _fmt(ultimo.get("peso_bruto_kg"), "kg"))
     with k2:
-        st.metric(t("Talla (cm)"), _fmt(ultimo.get("talla_cm"), "cm"))
+        st.metric(t("Talla (cm)"), _fmt(ultimo.get("talla_corporal_cm"), "cm"))
     with k3:
-        st.metric(t("% Grasa"), _fmt(ultimo.get("porcentaje_grasa"), "%"))
+        st.metric(t("% Grasa"), _fmt(ultimo.get("ajuste_adiposa_pct"), "%"))
     with k4:
-        st.metric(t("% Muscular"), _fmt(ultimo.get("porcentaje_muscular"), "%"))
+        st.metric(t("% Muscular"), _fmt(ultimo.get("ajuste_muscular_pct"), "%"))
     with k5:
         st.metric(t("Masa ósea (kg)"), _fmt(ultimo.get("masa_osea_kg"), "kg"))
     with k6:
@@ -56,7 +56,7 @@ def metricas(df: pd.DataFrame) -> None:
 def _get_resumen_tecnico_antropometria(df: pd.DataFrame) -> str:
     last = df.iloc[-1]
 
-    grasa = last.get("porcentaje_grasa")
+    grasa = last.get("ajuste_adiposa_pct")
     imo = last.get("indice_musculo_oseo")
 
     def c(txt, col):
@@ -98,15 +98,15 @@ def _prepare_antropometria_df(df: pd.DataFrame) -> pd.DataFrame:
 
     # Normalizar fecha → SOLO fecha
     df["fecha"] = (
-        pd.to_datetime(df["fecha_sesion"])
+        pd.to_datetime(df["fecha_medicion"])
         .dt.normalize()
     )
 
     # 🔧 FORZAR NUMÉRICOS (CLAVE)
     cols_numericas = [
-        "peso_kg",
-        "porcentaje_grasa",
-        "porcentaje_muscular",
+        "peso_bruto_kg",
+        "ajuste_adiposa_pct",
+        "ajuste_muscular_pct",
         "masa_osea_kg",
         "indice_musculo_oseo",
     ]
@@ -120,7 +120,7 @@ def _prepare_antropometria_df(df: pd.DataFrame) -> pd.DataFrame:
 
     # Eliminar filas realmente vacías
     df = df[
-        df[["peso_kg", "porcentaje_grasa"]]
+        df[["peso_bruto_kg", "ajuste_adiposa_pct"]]
         .notna()
         .any(axis=1)
     ]
@@ -150,8 +150,8 @@ def grafico_peso_grasa(
     # -------------------------
     # RANGO DINÁMICO PESO
     # -------------------------
-    peso_min = df["peso_kg"].min()
-    peso_max = df["peso_kg"].max()
+    peso_min = df["peso_bruto_kg"].min()
+    peso_max = df["peso_bruto_kg"].max()
 
     # Margen adaptativo (antropometría real)
     rango = peso_max - peso_min
@@ -162,12 +162,12 @@ def grafico_peso_grasa(
     # -------------------------
     fig.add_trace(go.Bar(
         x=df["fecha_label"],
-        y=df["peso_kg"],
+        y=df["peso_bruto_kg"],
         name=t("Peso (kg)"),
         marker_color="#1F4ED8",
         opacity=0.85,
         width=0.6,
-        text=df["peso_kg"].round(1).astype(str) + " kg",
+        text=df["peso_bruto_kg"].round(1).astype(str) + " kg",
         textposition="outside",
         hovertemplate=(
             "<b>" + t("Peso") + "</b><br>"
@@ -182,7 +182,7 @@ def grafico_peso_grasa(
     # -------------------------
     fig.add_trace(go.Scatter(
         x=df["fecha_label"],
-        y=df["porcentaje_grasa"],
+        y=df["ajuste_adiposa_pct"],
         name=t("% Grasa"),
         yaxis="y2",
         mode="lines+markers",
@@ -266,8 +266,8 @@ def _alerta_tendencia_grasa(df: pd.DataFrame):
     df = df.sort_values("fecha")
 
     delta = (
-        df["porcentaje_grasa"].iloc[-1]
-        - df["porcentaje_grasa"].iloc[-3]
+        df["ajuste_adiposa_pct"].iloc[-1]
+        - df["ajuste_adiposa_pct"].iloc[-3]
     )
 
     if delta >= 2.0:
@@ -291,14 +291,14 @@ def grafico_composicion(df):
 
     fig.add_trace(go.Scatter(
         x=df["fecha"],
-        y=df["porcentaje_grasa"],
+        y=df["ajuste_adiposa_pct"],
         name=t("% Grasa"),
         mode="lines+markers"
     ))
 
     fig.add_trace(go.Scatter(
         x=df["fecha"],
-        y=df["porcentaje_muscular"],
+        y=df["ajuste_muscular_pct"],
         name=t("% Muscular"),
         mode="lines+markers"
     ))
@@ -336,7 +336,7 @@ def grafico_indice_musculo_oseo(df):
     if usar_barras:
         fig.add_bar(
             x=df["fecha"],
-            y=df["indice_musculo_oseo"],
+            y=df["idx_musculo_oseo"],
             name=t("Índice músculo-óseo"),
             width=0.3,
             showlegend=True
@@ -344,7 +344,7 @@ def grafico_indice_musculo_oseo(df):
     else:
         fig.add_trace(go.Scatter(
             x=df["fecha"],
-            y=df["indice_musculo_oseo"],
+            y=df["idx_musculo_oseo"],
             name=t("Índice músculo-óseo"),
             mode="lines+markers",
             showlegend=True

@@ -1,6 +1,7 @@
 import streamlit as st
 import modules.app_config.config as config
 from modules.ui.ui_admin import dialog_eliminar, dialog_eliminar_todos_filtrados
+from modules.util.util import data_format
 config.init_config()
 
 from modules.db.db_catalogs import load_catalog_list_db
@@ -19,6 +20,7 @@ st.header(t("Administrador de :red[registros]"), divider="red")
 jug_df = load_players_db()
 comp_df = load_competitions_db()
 records_df = get_records_db()
+records_df = data_format(records_df)
 tipo_ausencia_df = load_catalog_list_db("tipo_ausencia", as_df=True)
 
 #st.dataframe(template_df)
@@ -37,7 +39,16 @@ columna = t("seleccionar")
 if columna not in records_df.columns:
     records_df.insert(0, columna, False)
 
-#records_vista = records.drop("id", axis=1)
+orden = ["seleccionar","id_isak", "identificacion", "nombre_jugadora", "fecha_medicion"]
+    
+# # Columnas del orden que sí existen
+orden_existentes = [c for c in orden if c in records_df.columns]
+
+# Reordenar SIN perder columnas
+records_df = records_df[orden_existentes]
+
+records_df.reset_index(drop=True, inplace=True)
+records_df.index = records_df.index + 1
 
 df_edited = st.data_editor(records_df, 
         column_config={
@@ -45,7 +56,7 @@ df_edited = st.data_editor(records_df,
         num_rows="fixed", hide_index=True, disabled=disabled)
 st.caption(f"{len(records_df)} registros encontrados")
 
-ids_seleccionados = df_edited.loc[df_edited[columna], "id"].tolist()
+ids_seleccionados = df_edited.loc[df_edited[columna], "id_isak"].tolist()
 
 if st.session_state["auth"]["rol"].lower() in ["developer"]:
     st.write(t("Registros seleccionados:"), ids_seleccionados)

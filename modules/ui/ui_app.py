@@ -70,7 +70,7 @@ def filter_df_by_period(df: pd.DataFrame, periodo: str):
         return df.copy(), ""
 
     if periodo == "Última sesión":
-        df_sorted = df.sort_values("fecha_sesion")
+        df_sorted = df.sort_values("fecha_medicion")
         df_filtrado = (
             df_sorted
             .groupby("identificacion", as_index=False)
@@ -80,15 +80,15 @@ def filter_df_by_period(df: pd.DataFrame, periodo: str):
         texto = t("última sesión")
 
     else:  # Histórico (6 meses)
-        fecha_max = df["fecha_sesion"].max()
+        fecha_max = df["fecha_medicion"].max()
         df_filtrado = df[
-            df["fecha_sesion"] >= (fecha_max - pd.Timedelta(days=180))
+            df["fecha_medicion"] >= (fecha_max - pd.Timedelta(days=180))
         ].copy()
         texto = t("últimos 6 meses")
 
     # Orden final
     df_filtrado = df_filtrado.sort_values(
-        by="fecha_sesion", ascending=False
+        by="fecha_medicion", ascending=False
     ).reset_index(drop=True)
 
     # Limpieza segura
@@ -390,10 +390,10 @@ def generar_resumen_periodo(df: pd.DataFrame):
     # --- Añadir columnas de conteo ---
     registros_por_jugadora = (
         df_periodo.groupby("nombre_jugadora", as_index=False)
-        .agg(Registros_periodo=("fecha_sesion", "count"))
+        .agg(Registros_periodo=("fecha_medicion", "count"))
     )
 
-    dias_periodo = df_periodo["fecha_sesion"].nunique()
+    dias_periodo = df_periodo["fecha_medicion"].nunique()
     registros_por_jugadora["Dias_periodo"] = dias_periodo
 
     # Unir al resumen

@@ -5,7 +5,7 @@ from modules.db.db_connection import get_connection
 #  🔹 FUNCIÓN GENÉRICA PARA EJECUTAR SELECT
 # ============================================================
 
-def query(sql: str, params=None, fetch="all"):
+def query(sql: str, params=None, fetch="all", conn=None, cursor=None):
     """
     Executes a SELECT query using a pooled MySQL connection.
 
@@ -21,12 +21,13 @@ def query(sql: str, params=None, fetch="all"):
             - True for no-fetch operations
             - None on error
     """
-    try:
-        conn = get_connection()
-        if conn is None:
-            return None
+    internal_conn = False
 
-        cursor = conn.cursor(dictionary=True)
+    try:
+        if conn is None:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+            internal_conn = True
 
         cursor.execute(sql, params)
 
@@ -35,7 +36,6 @@ def query(sql: str, params=None, fetch="all"):
         elif fetch == "one":
             result = cursor.fetchone()
         else:
-            conn.commit()
             result = True
 
         return result
@@ -45,20 +45,18 @@ def query(sql: str, params=None, fetch="all"):
         return None
 
     finally:
-        try:
-            cursor.close()
-        except:
-            pass
-        try:
-            conn.close()  # Vuelve al pool, no cierra la conexión física
-        except:
-            pass
+        if internal_conn:
+            try:
+                cursor.close()
+                conn.close()
+            except:
+                pass
 
 # ============================================================
 #  🔹 FUNCIÓN GENÉRICA PARA EJECUTAR INSERT / UPDATE / DELETE
 # ============================================================
 
-def execute(sql: str, params=None):
+def execute(sql: str, params=None, conn=None, cursor=None):
 
     """
     Executes an INSERT, UPDATE, or DELETE query.
@@ -70,19 +68,31 @@ def execute(sql: str, params=None):
     Returns:
         bool: True if committed successfully, False on error.
     """
+    internal_conn = False
+
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
+        if conn is None:
+            conn = get_connection()
+            cursor = conn.cursor()
+            internal_conn = True
+
         cursor.execute(sql, params)
-        conn.commit()
+
+        if internal_conn:
+            conn.commit()
+
         return True
-    
+
     except Exception as e:
         st.error(f"Error ejecutando operación: {e}")
+        if internal_conn and conn:
+            conn.rollback()
         return False
-    
+
     finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        if internal_conn:
+            try:
+                cursor.close()
+                conn.close()
+            except:
+                pass
