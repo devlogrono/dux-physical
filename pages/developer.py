@@ -9,7 +9,6 @@ from datetime import timedelta, date
 
 from modules.db.db_competitions import load_competitions_db
 from modules.db.db_players import load_players_db
-from modules.db.db_records import upsert_record_db
 from modules.i18n.i18n import t
 import modules.app_config.config as config
 from modules.schema import new_base_record

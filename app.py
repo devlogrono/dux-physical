@@ -2,7 +2,7 @@ import streamlit as st
 
 from modules.db.db_competitions import load_competitions_db
 from modules.db.db_players import load_players_db
-from modules.db.db_records import get_records_db
+from modules.util.db_util import get_isak
 from modules.util.util import clean_df, data_format
 from modules.ui.ui_app import (
     filter_df_by_period,
@@ -15,25 +15,24 @@ import modules.app_config.config as config
 config.init_config()
 
 st.header(t("Resumen de :red[1er Equipo]"), divider="red")
-#st.session_state.clear()
+
 # ============================================================
-# 📦 CARGA DE DATOS
+# CARGA DE DATOS
 # ============================================================
-df_records = get_records_db()
-#st.dataframe(df)
+df_records = get_isak()
+#st.dataframe(df_records)
 
 if df_records.empty:
     st.warning(t("No hay registros disponibles."))
     st.stop()
 
-df_records = data_format(df_records)
+#df_records = data_format(df_records)
 jug_df = load_players_db()
 #st.dataframe(df_records)
  
 #jug_df = jug_df[jug_df["plantel"] == "1FF"]
    
 comp_df = load_competitions_db()
-#ausencias_df = load_active_absences_db()
 
 # ============================================================
 # INTERFAZ PRINCIPAL
@@ -62,10 +61,10 @@ with col1:
 
 # Cálculos principales
 
-peso_prom, chart_peso, delta_peso = calc_metric_block(df_periodo, periodo, "peso_kg", "mean")
-grasa_prom, chart_grasa, delta_grasa = calc_metric_block(df_periodo, periodo, "porcentaje_grasa", "mean")
-musculo_prom, chart_musculo, delta_musculo = calc_metric_block(df_periodo, periodo, "porcentaje_muscular", "mean")
-indice_mo_prom, chart_mo, delta_mo = calc_metric_block(df_periodo, periodo, "indice_musculo_oseo", "mean")
+peso_prom, chart_peso, delta_peso = calc_metric_block(df_periodo, periodo, "peso_bruto_kg", "mean")
+grasa_prom, chart_grasa, delta_grasa = calc_metric_block(df_periodo, periodo, "ajuste_adiposa_pct", "mean")
+musculo_prom, chart_musculo, delta_musculo = calc_metric_block(df_periodo, periodo, "ajuste_muscular_pct", "mean")
+indice_mo_prom, chart_mo, delta_mo = calc_metric_block(df_periodo, periodo, "idx_musculo_oseo", "mean")
 
 #alertas_count, total_jugadoras, alertas_pct, chart_alertas, delta_alertas = calc_alertas(df_periodo, df, periodo)
 

@@ -11,6 +11,24 @@ from dateutil.relativedelta import relativedelta  # pip install python-dateutil
 from datetime import date, timedelta
 import re
 import base64
+from modules.schema import MAP_POSICIONES
+from modules.i18n.i18n import t
+import json
+from difflib import SequenceMatcher
+
+def compare_names(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+def normalize_name(text: str) -> str:
+    text = text.lower()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    text = re.sub(r"[^a-z\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def load_posiciones_traducidas() -> dict:
+    return {key: t(valor_es) for key, valor_es in MAP_POSICIONES.items()}
 
 def normalize_text(s):
     """Limpia texto eliminando tildes, espacios invisibles y normalizando Unicode."""
@@ -47,17 +65,29 @@ def data_format(df: pd.DataFrame):
     df = df[df["plantel"] == "1FF"].copy()
 
     # 2. Conversión segura a datetime
-    df["fecha_sesion"] = pd.to_datetime(df["fecha_sesion"], errors="coerce")
+    df["fecha_sesion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
 
     # 3. Nuevas columnas derivadas
     df["fecha_dia"] = df["fecha_sesion"].dt.date
     df["semana"] = df["fecha_sesion"].dt.isocalendar().week
     df["mes"] = df["fecha_sesion"].dt.month
 
-    # 4. Volver a dejar fecha_sesion como date (sin warnings)
-    df["fecha_sesion"] = df["fecha_sesion"].dt.date
+    # 4. Volver a dejar fecha_medicion como date (sin warnings)
+    #df["fecha_medicion"] = df["fecha_medicion"].dt.date
 
     return df
+
+def f0(value) -> float:
+    """
+    Convierte a float de forma segura.
+    - None → 0.0
+    - strings vacíos → 0.0
+    - errores → 0.0
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 def clean_df(records):
     columnas_excluir = [
@@ -83,7 +113,7 @@ def clean_df(records):
     # rename_dict = {
     #     "identificacion": t("Idenficación"),
     #     "nombre_jugadora": t("Jugadora"),
-    #     "fecha_sesion": t("Fecha"),
+    #     "fecha_medicion": t("Fecha"),
     #     "Tipo": t("Tipo"),
     #     "Recuperacion": t("Recuperación"),
     #     "Energia": t("Energía"),
@@ -98,19 +128,22 @@ def clean_df(records):
     # 3️⃣ Aplicar el renombre al DataFrame
     #df_traducido = df_filtrado.rename(columns=rename_dict)
 
-    #orden = ["fecha_lesion", "nombre_jugadora", "posicion", "plantel" ,"id_lesion", "lugar", "segmento", "zona_cuerpo", "zona_especifica", "lateralidad", "tipo_lesion", "tipo_especifico", "gravedad", "tipo_tratamiento", "personal_reporta", "estado_lesion", "sesiones"]
+    orden = ["identificacion", "nombre_jugadora", "fecha_medicion", "peso_bruto_kg" ,"talla_corporal_cm", "talla_sentado_cm", "envergadura_cm"]
     
-    # Solo mantener columnas que realmente existen
-    #orden_existentes = [c for c in orden if c in df_filtrado.columns]
+    # Columnas del orden que sí existen
+    orden_existentes = [c for c in orden if c in df_cleaned.columns]
 
-    #df_filtrado = df_filtrado[orden_existentes + [c for c in df_filtrado.columns if c not in orden_existentes]]
-        
-    #df_filtrado = df_filtrado[orden + [c for c in df_filtrado.columns if c not in orden]]
+    # Resto de columnas (mantener todas)
+    #resto = [c for c in df_cleaned.columns if c not in orden_existentes]
+
+    # Reordenar SIN perder columnas
+    df_filtrado = df_cleaned[orden_existentes]
 
     #df_filtrado = df_filtrado.sort_values("fecha_hora_registro", ascending=False)
-    df_cleaned.reset_index(drop=True, inplace=True)
-    df_cleaned.index = df_cleaned.index + 1
-    return df_cleaned
+    df_filtrado.reset_index(drop=True, inplace=True)
+    df_filtrado.index = df_filtrado.index + 1
+   
+    return df_filtrado
 
 def ordenar_df(df: pd.DataFrame, columna: str, ascendente: bool = True) -> pd.DataFrame:
     """
@@ -423,3 +456,64 @@ def set_background_image_local(image_path: str, fixed: bool = False, overlay: fl
     """
 
     st.markdown(css, unsafe_allow_html=True)
+
+def _parse_jsonish(x):
+    """
+    Convierte strings tipo JSON a dict.
+    Soporta casos con comillas dobles duplicadas: {""a"":1}
+    Devuelve None si no se puede parsear.
+    """
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if isinstance(x, dict):
+        return x
+    if not isinstance(x, str):
+        return None
+
+    s = x.strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return None
+
+    # Caso típico en tu DF: {""a"":1,""b"":2}
+    # Convertimos "" -> " para que sea JSON válido
+    s_fixed = s.replace('""', '"')
+
+    try:
+        return json.loads(s_fixed)
+    except Exception:
+        return None
+
+def expand_all_json_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Detecta columnas con strings JSON y las expande a columnas.
+    Mantiene el índice original y NO depende de dropna().
+    """
+    cols_to_expand = []
+
+    # Detecta columnas intentando parsear un ejemplo real
+    for col in df.columns:
+        if df[col].empty:
+            continue
+
+        sample_series = df[col].dropna()
+        if sample_series.empty:
+            continue
+
+        sample = sample_series.iloc[0]
+        if _parse_jsonish(sample) is not None:
+            cols_to_expand.append(col)
+
+    # Expande cada columna candidata
+    for col in cols_to_expand:
+        parsed = df[col].apply(_parse_jsonish)  # dict o None, index intacto
+
+        # si no hay nada parseable, saltar
+        if parsed.dropna().empty:
+            continue
+
+        expanded = parsed.apply(lambda d: d if isinstance(d, dict) else {}).apply(pd.Series)
+        expanded = expanded.add_prefix(f"{col}_")
+
+        df = pd.concat([df.drop(columns=[col]), expanded], axis=1)
+
+    return df

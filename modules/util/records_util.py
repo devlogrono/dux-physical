@@ -11,11 +11,11 @@ def generar_valores_antropometria():
     imo = round(muscular / masa_osea, 2)
 
     return {
-        "peso_kg": peso,
-        "talla_cm": round(random.uniform(158, 178), 1),
+        "peso_bruto_kg": peso,
+        "talla_corporal_cm": round(random.uniform(158, 178), 1),
         "suma_6_pliegues_mm": round(random.uniform(45, 85), 1),
-        "porcentaje_grasa": grasa,
-        "porcentaje_muscular": muscular,
+        "ajuste_adiposa_pct": grasa,
+        "ajuste_muscular_pct": muscular,
         "masa_osea_kg": masa_osea,
         "indice_musculo_oseo": imo,
     }

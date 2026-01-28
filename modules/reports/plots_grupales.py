@@ -9,18 +9,18 @@ from modules.i18n.i18n import t
 # 🧭 Función auxiliar de fecha
 # ============================================================
 def _ensure_fecha(df: pd.DataFrame) -> pd.DataFrame:
-    """Asegura columna 'fecha_sesion' y añade 'semana', 'anio' y 'rango_semana'."""
+    """Asegura columna 'fecha_medicion' y añade 'semana', 'anio' y 'rango_semana'."""
     df = df.copy()
-    if "fecha_sesion" not in df.columns:
-        st.warning("El DataFrame no contiene la columna 'fecha_sesion'.")
+    if "fecha_medicion" not in df.columns:
+        st.warning("El DataFrame no contiene la columna 'fecha_medicion'.")
         return df
 
-    df["fecha_sesion"] = pd.to_datetime(df["fecha_sesion"], errors="coerce")
-    df["anio"] = df["fecha_sesion"].dt.year
-    df["semana"] = df["fecha_sesion"].dt.isocalendar().week
+    df["fecha_medicion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
+    df["anio"] = df["fecha_medicion"].dt.year
+    df["semana"] = df["fecha_medicion"].dt.isocalendar().week
 
     # Etiqueta más amigable: rango de lunes a domingo
-    df["inicio_semana"] = df["fecha_sesion"] - pd.to_timedelta(df["fecha_sesion"].dt.weekday, unit="d")
+    df["inicio_semana"] = df["fecha_medicion"] - pd.to_timedelta(df["fecha_medicion"].dt.weekday, unit="d")
     df["fin_semana"] = df["inicio_semana"] + pd.Timedelta(days=6)
     df["rango_semana"] = df["inicio_semana"].dt.strftime("%d %b") + "–" + df["fin_semana"].dt.strftime("%d %b")
 
@@ -30,11 +30,11 @@ def plot_distribuciones(df: pd.DataFrame):
     df = df.copy()
 
     columnas = {
-        "peso_kg": t("Peso (kg)"),
-        "talla_cm": t("Talla (cm)"),
+        "peso_bruto_kg": t("Peso (kg)"),
+        "talla_corporal_cm": t("Talla (cm)"),
         "suma_6_pliegues_mm": t("Suma 6 pliegues (mm)"),
-        "porcentaje_grasa": t("% Grasa"),
-        "porcentaje_muscular": t("% Muscular"),
+        "ajuste_adiposa_pct": t("% Grasa"),
+        "ajuste_muscular_pct": t("% Muscular"),
         "masa_osea_kg": t("Masa ósea (kg)"),
         "indice_musculo_oseo": t("Índice músculo–óseo"),
     }
@@ -68,7 +68,7 @@ def plot_distribuciones(df: pd.DataFrame):
         st.plotly_chart(fig)
 
 def plot_comparacion_mediciones(df: pd.DataFrame):
-    if "fecha_sesion" not in df.columns:
+    if "fecha_medicion" not in df.columns:
         st.info(t("No hay fechas para comparar mediciones."))
         return
 
@@ -83,7 +83,7 @@ def plot_comparacion_mediciones(df: pd.DataFrame):
         )
     )
 
-    df = df.sort_values("fecha_sesion")
+    df = df.sort_values("fecha_medicion")
 
     df["orden_medicion"] = (
         df.groupby("identificacion").cumcount() + 1
@@ -98,7 +98,7 @@ def plot_comparacion_mediciones(df: pd.DataFrame):
     resumen = (
         df.groupby("orden_medicion")
         .agg(
-            peso=("peso_kg", "mean"),
+            peso=("peso_bruto_kg", "mean"),
             pliegues=("suma_6_pliegues_mm", "mean"),
             imo=("indice_musculo_oseo", "mean"),
         )
@@ -197,10 +197,10 @@ def tabla_resumen(df: pd.DataFrame):
     resumen = (
         df.groupby("nombre_jugadora", as_index=False)
         .agg(
-            peso=("peso_kg", "mean"),
-            grasa=("porcentaje_grasa", "mean"),
-            pliegues=("suma_6_pliegues_mm", "mean"),
-            imo=("indice_musculo_oseo", "mean"),
+            peso=("peso_bruto_kg", "mean"),
+            grasa=("ajuste_adiposa_pct", "mean"),
+            pliegues=("ajuste_muscular_pct", "mean"),
+            imo=("idx_musculo_oseo", "mean"),
         )
     )
 

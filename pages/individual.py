@@ -9,6 +9,7 @@ from modules.reports.ui_individual import graficos_individuales, player_block_du
 from modules.db.db_records import get_records_db
 from modules.db.db_players import load_players_db
 from modules.db.db_competitions import load_competitions_db
+from modules.util.db_util import get_isak
 
 config.init_config()
 st.header(t("Análisis :red[individual]"), divider="red")
@@ -16,9 +17,10 @@ st.header(t("Análisis :red[individual]"), divider="red")
 # Load reference data
 jug_df = load_players_db()
 comp_df = load_competitions_db()
-df = get_records_db()
-
-df_filtrado, jugadora, start, end = selection_header(jug_df, comp_df, df, modo="reporte")
+#df = get_records_db()
+df_records = get_isak()
+#st.dataframe(df_records)
+df_filtrado, jugadora, start, end = selection_header(jug_df, comp_df, df_records, modo="reporte")
 
 if not jugadora:
     st.info(t("Selecciona una jugadora para continuar."))

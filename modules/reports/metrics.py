@@ -27,17 +27,17 @@ def _prepare_checkout_df(df: pd.DataFrame) -> pd.DataFrame:
     else:
         out["ua"] = np.nan
     # Ensure fecha_dia exists
-    if "fecha" in out.columns and "fecha_sesion" not in out.columns:
-        out["fecha_sesion"] = pd.to_datetime(out["fecha_sesion"], errors="coerce").dt.date
-    return out.dropna(subset=["fecha_sesion", "ua"])
+    if "fecha" in out.columns and "fecha_medicion" not in out.columns:
+        out["fecha_medicion"] = pd.to_datetime(out["fecha_medicion"], errors="coerce").dt.date
+    return out.dropna(subset=["fecha_medicion", "ua"])
 
 def _daily_loads(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calcula las cargas diarias sumando UA (RPE × minutos) y minutos de sesión
-    por fecha_sesion. Devuelve un DataFrame con ambas métricas.
+    por fecha_medicion. Devuelve un DataFrame con ambas métricas.
     """
     if df.empty:
-        return pd.DataFrame(columns=["fecha_sesion", "ua_total", "minutos_total"])
+        return pd.DataFrame(columns=["fecha_medicion", "ua_total", "minutos_total"])
 
     # --- asegurar columnas necesarias ---
     if "ua" not in df.columns:
@@ -47,10 +47,10 @@ def _daily_loads(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- agrupar ---
     grp = (
-        df.groupby("fecha_sesion", as_index=False)[["ua", "minutos_sesion"]]
+        df.groupby("fecha_medicion", as_index=False)[["ua", "minutos_sesion"]]
         .sum(min_count=1)  # evita NaN si todos son NaN
         .rename(columns={"ua": "ua_total", "minutos_sesion": "minutos_total"})
-        .sort_values("fecha_sesion")
+        .sort_values("fecha_medicion")
     )
 
     return grp
@@ -101,11 +101,11 @@ def compute_rpe_metrics(df_raw: pd.DataFrame, flt: RPEFilters) -> dict:
     res["daily_table"] = daily
 
     # Determine reference end date
-    end_day = flt.end or daily["fecha_sesion"].max()
+    end_day = flt.end or daily["fecha_medicion"].max()
 
     # Week metrics (use the week containing end_day)
     week_start, week_end = _current_week_range(end_day)
-    daily_week = daily[(daily["fecha_sesion"] >= week_start) & (daily["fecha_sesion"] <= week_end)]
+    daily_week = daily[(daily["fecha_medicion"] >= week_start) & (daily["fecha_medicion"] <= week_end)]
     semana_sum = daily_week["ua_total"].sum() if not daily_week.empty else 0.0
     semana_mean = daily_week["ua_total"].mean() if not daily_week.empty else 0.0
     semana_std = daily_week["ua_total"].std(ddof=0) if len(daily_week) > 1 else 0.0
@@ -118,13 +118,13 @@ def compute_rpe_metrics(df_raw: pd.DataFrame, flt: RPEFilters) -> dict:
     # st.dataframe(daily_week)
 
     # Day metric (exact end_day)
-    day_row = daily[daily["fecha_sesion"] == end_day]
+    day_row = daily[daily["fecha_medicion"] == end_day]
     #st.dataframe(day_row)
     res["ua_total_dia"] = float(day_row["ua_total"].iloc[0]) if not day_row.empty else 0.0
 
     # Month metrics (calendar month of end_day)
     m_start, m_end = _month_range(end_day)
-    daily_month = daily[(daily["fecha_sesion"] >= m_start) & (daily["fecha_sesion"] <= m_end)]
+    daily_month = daily[(daily["fecha_medicion"] >= m_start) & (daily["fecha_medicion"] <= m_end)]
     mes_sum = daily_month["ua_total"].sum() if not daily_month.empty else 0.0
     mes_mean = daily_month["ua_total"].mean() if not daily_month.empty else 0.0
     res["carga_mes"] = float(mes_sum)
@@ -133,13 +133,13 @@ def compute_rpe_metrics(df_raw: pd.DataFrame, flt: RPEFilters) -> dict:
     # Acute/Chronic fatigue and derived indices
     # Acute = sum last 7 days ending at end_day
     last7_start = end_day - timedelta(days=6)
-    daily_last7 = daily[(daily["fecha_sesion"] >= last7_start) & (daily["fecha_sesion"] <= end_day)]
+    daily_last7 = daily[(daily["fecha_medicion"] >= last7_start) & (daily["fecha_medicion"] <= end_day)]
     fatiga_aguda = daily_last7["ua_total"].sum() if not daily_last7.empty else 0.0
     res["fatiga_aguda"] = float(fatiga_aguda)
 
     # Chronic = average daily load over last 28 days
     last28_start = end_day - timedelta(days=27)
-    daily_last28 = daily[(daily["fecha_sesion"] >= last28_start) & (daily["fecha_sesion"] <= end_day)]
+    daily_last28 = daily[(daily["fecha_medicion"] >= last28_start) & (daily["fecha_medicion"] <= end_day)]
     fatiga_cronica = daily_last28["ua_total"].mean() if not daily_last28.empty else 0.0
     res["fatiga_cronica"] = float(fatiga_cronica)
 

@@ -87,7 +87,7 @@ def graficos_individuales(df: pd.DataFrame):
         st.info(t("No hay datos disponibles para graficar."))
         return
 
-    df = df.sort_values("fecha_sesion")
+    df = df.sort_values("fecha_medicion")
 
     st.markdown(t("### **Gráficos**"))
 

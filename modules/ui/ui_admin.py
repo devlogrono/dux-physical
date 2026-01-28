@@ -1,6 +1,6 @@
 
 import streamlit as st
-from modules.db.db_records import delete_record
+from modules.db.db_records import delete_records_by_ids
 from modules.i18n.i18n import t
 
 @st.dialog(t("Eliminar registros filtrados"), width="small")
@@ -31,7 +31,7 @@ def dialog_eliminar_todos_filtrados(ids_todos):
                 type="primary"
             ):
                 deleted_by = st.session_state["auth"]["name"].lower()
-                exito, mensaje = delete_record(ids_todos, deleted_by)
+                exito, mensaje = delete_records_by_ids(ids_todos, deleted_by)
 
                 if exito:
                     st.session_state["reload_flag"] = True
@@ -45,7 +45,6 @@ def dialog_eliminar_todos_filtrados(ids_todos):
                 t(":material/delete: Eliminar todos"),
                 disabled=True
             )
-
 
 # ===============================
 # 🔸 Diálogo de confirmación
@@ -61,7 +60,13 @@ def dialog_eliminar(ids_seleccionados):
     with col3:
         if st.button(t(":material/delete: Eliminar"), type="primary"):
             deleted_by = st.session_state["auth"]["name"].lower()
-            exito, mensaje = delete_record(ids_seleccionados, deleted_by)
+            result = delete_records_by_ids(ids_seleccionados, deleted_by)
+
+            if isinstance(result, tuple):
+                exito, mensaje = result
+            else:
+                exito = bool(result)
+                mensaje = t("Error inesperado eliminando registros")
 
             if exito:
                 # Marcar para recarga
