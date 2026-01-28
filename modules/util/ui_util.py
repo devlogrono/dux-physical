@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 from modules.db.db_records import save_isak_session
 from modules.i18n.i18n import t
@@ -33,7 +34,15 @@ def dialog_confirmar_registro(record, jugadora):
             else:
                 st.session_state["save_error"] = True
 
-            st.rerun()
+            # ---------------------------------------
+            # 7. Redirección segura SOLO para este navegador
+            # ---------------------------------------
+            if st.session_state.get("submitted"):
+                del st.session_state["submitted"]
+                st.session_state["target_page"] = "registro"
+                time.sleep(2)  # Pequeña pausa para evitar conflictos
+                st.switch_page("pages/switch.py")
+                #st.rerun()
 
 
 
