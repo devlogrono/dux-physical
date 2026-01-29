@@ -31,7 +31,7 @@ def get_records_db(as_df: bool = True):
           AND f.id_estado = 1
           AND i.estatus_id IN (1, 2)
 
-        ORDER BY i.fecha_medicion DESC limit 1;
+        ORDER BY i.fecha_medicion DESC;
     """
 
     rows = query(sql)
