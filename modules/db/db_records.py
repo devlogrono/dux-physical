@@ -488,6 +488,7 @@ def delete_isak_session(cursor, id_isak: int, deleted_by: str):
 
 #########################
 
+@st.cache_data(ttl=36000, show_spinner=False)
 def build_record_from_isak(id_isak: int, id_jugadora: str, username: str) -> dict:
     record = new_base_record(id_jugadora=id_jugadora, username=username)
     record["_modo"] = "SEGUIMIENTO"
@@ -505,6 +506,7 @@ def build_record_from_isak(id_isak: int, id_jugadora: str, username: str) -> dic
 
     return record
 
+@st.cache_data(ttl=36000, show_spinner=False)
 def get_isak_full(as_df: bool = True):
     """
     Devuelve un DataFrame ISAK completo usando únicamente

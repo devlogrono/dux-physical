@@ -4,68 +4,148 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from modules.i18n.i18n import t
+from modules.util.util import _title
 
-# ============================================================
-# 🧭 Función auxiliar de fecha
-# ============================================================
-def _ensure_fecha(df: pd.DataFrame) -> pd.DataFrame:
-    """Asegura columna 'fecha_medicion' y añade 'semana', 'anio' y 'rango_semana'."""
-    df = df.copy()
-    if "fecha_medicion" not in df.columns:
-        st.warning("El DataFrame no contiene la columna 'fecha_medicion'.")
-        return df
+REQUIRED = {"suma_6_pliegues_mm", "idx_musculo_oseo", "nombre_jugadora"}
 
-    df["fecha_medicion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
-    df["anio"] = df["fecha_medicion"].dt.year
-    df["semana"] = df["fecha_medicion"].dt.isocalendar().week
+METRICAS_DISTRIBUCION = {
+    "peso_bruto_kg": t("Peso (kg)"),
+    "talla_corporal_cm": t("Talla (cm)"),
+    "suma_6_pliegues_mm": t("Suma 6 pliegues (mm)"),
+    "ajuste_adiposa_pct": t("% Grasa"),
+    "ajuste_muscular_pct": t("% Muscular"),
+    "masa_osea_kg": t("Masa ósea (kg)"),
+    "idx_musculo_oseo": t("Índice músculo-óseo"),
+}
 
-    # Etiqueta más amigable: rango de lunes a domingo
-    df["inicio_semana"] = df["fecha_medicion"] - pd.to_timedelta(df["fecha_medicion"].dt.weekday, unit="d")
-    df["fin_semana"] = df["inicio_semana"] + pd.Timedelta(days=6)
-    df["rango_semana"] = df["inicio_semana"].dt.strftime("%d %b") + "–" + df["fin_semana"].dt.strftime("%d %b")
+# -------------------------
+# ANOTACIONES (inteligentes)
+# -------------------------
+OFFSET_POSITIONS = [
+    (35, -28),   # derecha arriba
+    (35, -25),  # izquierda arriba
+    (-35, 25),    # derecha abajo
+    (-35, 25),   # izquierda abajo
+    (0, -10),    # arriba
+    (0, 10),     # abajo
+]
 
-    return df
+# -------------------------
+# CORTES (según PDF)
+# -------------------------
+X_CORTE = 70
+Y_CORTE = 3.80
+
+X_MIN, X_MAX = 30, 150
+Y_MIN, Y_MAX = 3.2, 4.5
+
+# -------------------------
+# ASIGNACIÓN DE CUADRANTE Y COLOR
+# -------------------------
+def cuadrante(row):
+    if row["x"] <= X_CORTE and row["y"] >= Y_CORTE:
+        return "G1", "#2ECC71"  # verde
+    if row["x"] > X_CORTE and row["y"] >= Y_CORTE:
+        return "G2", "#F1C40F"  # amarillo
+    if row["x"] <= X_CORTE and row["y"] < Y_CORTE:
+        return "G3", "#F39C12"  # naranja
+    return "G4", "#E74C3C"      # rojo
+
+# -------------------------
+# DETECCIÓN DE SOLAPAMIENTO
+# -------------------------
+def needs_arrow(row, df, dx=6, dy=0.08):
+    vecinos = df[
+        (abs(df["x"] - row["x"]) < dx) &
+        (abs(df["y"] - row["y"]) < dy)
+    ]
+    return len(vecinos) > 1
 
 def plot_distribuciones(df: pd.DataFrame):
-    df = df.copy()
+    st.caption(
+        t("Distribución individual del grupo con valores mínimo, máximo y promedio.")
+    )
 
-    columnas = {
-        "peso_bruto_kg": t("Peso (kg)"),
-        "talla_corporal_cm": t("Talla (cm)"),
-        "suma_6_pliegues_mm": t("Suma 6 pliegues (mm)"),
-        "ajuste_adiposa_pct": t("% Grasa"),
-        "ajuste_muscular_pct": t("% Muscular"),
-        "masa_osea_kg": t("Masa ósea (kg)"),
-        "indice_musculo_oseo": t("Índice músculo–óseo"),
+    metricas = {
+        k: v for k, v in METRICAS_DISTRIBUCION.items()
+        if k in df.columns and df[k].dropna().any()
     }
 
-    for col, titulo in columnas.items():
-        if col not in df.columns or df[col].dropna().empty:
-            continue
+    if not metricas:
+        st.info(t("No hay métricas disponibles."))
+        return
 
-        valores = pd.to_numeric(df[col], errors="coerce").dropna()
+    col = st.selectbox(
+        t("Seleccione la métrica"),
+        options=list(metricas.keys()),
+        format_func=lambda x: metricas[x],
+    )
 
-        fig = px.histogram(
-            valores,
-            nbins=12,
-            title=f"{titulo} — {t('Distribución grupal')}",
-            color_discrete_sequence=["#2E86C1"],
-        )
+    # -------------------------
+    # Datos
+    # -------------------------
+    data = (
+        df[["nombre_jugadora", col]]
+        .dropna()
+        .sort_values(col)
+    )
 
-        fig.add_vline(
-            x=valores.mean(),
-            line_dash="dash",
-            line_color="green",
-            annotation_text=t("Promedio"),
-        )
+    valores = pd.to_numeric(data[col], errors="coerce")
 
-        fig.update_layout(
-            xaxis_title=titulo,
-            yaxis_title=t("Número de jugadoras"),
-            template="plotly_white",
-        )
+    media = valores.mean()
+    minimo = valores.min()
+    maximo = valores.max()
 
-        st.plotly_chart(fig)
+    # -------------------------
+    # Gráfico
+    # -------------------------
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=data["nombre_jugadora"],
+        y=valores,
+        text=valores.map(lambda x: f"{x:.1f}"),
+        textposition="outside",
+        marker_color="#4A6FBF",
+    ))
+
+    # Línea de promedio
+    fig.add_hline(
+        y=media,
+        line_dash="dash",
+        line_color="#27AE60",
+        annotation_text=t("Promedio"),
+        annotation_position="top left",
+    )
+
+    fig.update_layout(
+        template="plotly_white",
+        xaxis_title="",
+        yaxis_title=metricas[col],
+        height=450,
+        margin=dict(t=60, b=120),
+        showlegend=False,
+    )
+
+    fig.update_xaxes(
+        tickangle=-45,
+        tickfont=dict(size=10),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------
+    # Resumen textual (como PDF)
+    # -------------------------
+    st.markdown(
+        f"""
+        **{metricas[col]}**
+
+        - **{t("Promedio")}**: {media:.2f}  
+        - **{t("Mínimo")}**: {minimo:.2f}  
+        - **{t("Máximo")}**: {maximo:.2f}
+        """
+    )
 
 def plot_comparacion_mediciones(df: pd.DataFrame):
     if "fecha_medicion" not in df.columns:
@@ -192,6 +272,160 @@ def plot_comparacion_mediciones(df: pd.DataFrame):
         """
     )
 
+def plot_perfil_antropometrico(df: pd.DataFrame):
+
+    if not REQUIRED.issubset(df.columns):
+        st.warning(t("No hay datos suficientes para generar el perfil antropométrico."))
+        return
+
+    df = df.copy()
+    df["x"] = pd.to_numeric(df["suma_6_pliegues_mm"], errors="coerce")
+    df["y"] = pd.to_numeric(df["idx_musculo_oseo"], errors="coerce")
+    df = df.dropna(subset=["x", "y"])
+
+    if df.empty:
+        st.info(t("No hay valores válidos para el perfil antropométrico."))
+        return
+
+    df[["grupo", "color"]] = df.apply(
+        lambda r: pd.Series(cuadrante(r)), axis=1
+    )
+
+    # Label final
+    df["label"] = df.apply(
+        lambda r: f'{r["nombre_jugadora"].title()} ({r["x"]:.1f}; {r["y"]:.2f})',
+        axis=1
+    )
+
+    # -------------------------
+    # FIGURA
+    # -------------------------
+    fig = go.Figure()
+
+    # --- SOLO puntos ---
+    fig.add_trace(go.Scatter(
+        x=df["x"],
+        y=df["y"],
+        mode="markers",
+        marker=dict(
+            size=10,
+            color=df["color"],
+            line=dict(width=1, color="white"),
+        ),
+        hovertemplate=(
+            "<b>%{customdata}</b><br>"
+            + t("Suma 6 pliegues") + ": %{x:.1f} mm<br>"
+            + t("Índice músculo/óseo") + ": %{y:.2f}<extra></extra>"
+        ),
+        customdata=df["label"],
+        showlegend=False,
+    ))
+
+
+    offset_index = 0
+
+    for _, row in df.iterrows():
+
+        if needs_arrow(row, df):
+            ax, ay = OFFSET_POSITIONS[offset_index % len(OFFSET_POSITIONS)]
+            offset_index += 1
+
+            fig.add_annotation(
+                x=row["x"],
+                y=row["y"],
+                text=row["label"],
+                showarrow=True,
+                arrowhead=2,
+                arrowwidth=1,
+                arrowcolor="#424245",
+                ax=ax,
+                ay=ay,
+                font=dict(size=9, color="#424245"),
+                bgcolor="rgba(255,255,255,0)",
+                borderpad=2,
+            )
+        else:
+            fig.add_annotation(
+                x=row["x"],
+                y=row["y"],
+                text=row["label"],
+                showarrow=False,
+                yshift=10,
+                font=dict(size=9, color="#374151"),
+            )
+
+    # -------------------------
+    # LÍNEAS DE CORTE
+    # -------------------------
+    fig.add_vline(x=X_CORTE, line_width=1.2, line_color="#9CA3AF")
+    fig.add_hline(y=Y_CORTE, line_width=1.2, line_color="#9CA3AF")
+
+    # -------------------------
+    # ETIQUETAS DE CUADRANTE
+    # -------------------------
+    fig.add_annotation(x=40,  y=4.4, text="<b>G1</b>", showarrow=False)
+    fig.add_annotation(x=115, y=4.4, text="<b>G2</b>", showarrow=False)
+    fig.add_annotation(x=40,  y=3.3, text="<b>G3</b>", showarrow=False)
+    fig.add_annotation(x=115, y=3.3, text="<b>G4</b>", showarrow=False)
+
+    # -------------------------
+    # ESTILO GENERAL
+    # -------------------------
+    fig.update_layout(
+        title=dict(
+            text=t("Perfil antropométrico grupal"),
+            x=0.02,
+            font=dict(size=18),
+        ),
+        xaxis=dict(
+            title=t("Suma 6 pliegues (mm)"),
+            range=[X_MIN, X_MAX],
+            gridcolor="#ECF0F1",
+        ),
+        yaxis=dict(
+            title=t("Índice músculo / óseo"),
+            range=[Y_MIN, Y_MAX],
+            gridcolor="#ECF0F1",
+        ),
+        template="plotly_white",
+        height=650,
+        margin=dict(l=40, r=40, t=80, b=40),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    get_interpretacion()
+
+def get_interpretacion():
+
+    with st.expander(t("Interpretación del perfil antropométrico"), expanded=False):
+
+        st.markdown(
+            f"""
+            <div style="line-height:1.6">
+
+            <span style="color:#2ECC71;"><b>G1 · Alto en músculo / Bajo en grasa</b></span><br>
+            Perfil corporal óptimo para el rendimiento deportivo. Se asocia a una mayor eficiencia mecánica,
+            buena potencia relativa y menor lastre corporal.
+
+            <span style="color:#F1C40F;"><b>G2 · Alto en músculo / Alto en grasa</b></span><br>
+            Buen desarrollo muscular con margen de mejora en la composición corporal.
+            Existe potencial de optimización reduciendo masa grasa sin comprometer la masa muscular.
+
+            <span style="color:#F39C12;"><b>G3 · Bajo en músculo / Bajo en grasa</b></span><br>
+            Perfil corporal ligero con posible déficit estructural.
+            Puede limitar la producción de fuerza y la tolerancia a contactos, siendo recomendable un trabajo
+            orientado al desarrollo muscular.
+
+            <span style="color:#E74C3C;"><b>G4 · Bajo en músculo / Alto en grasa</b></span><br>
+            Perfil menos favorable para el rendimiento físico.
+            Puede afectar a la eficiencia del movimiento y aumentar el lastre corporal,
+            siendo prioritaria la intervención desde el entrenamiento y la nutrición.
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 def tabla_resumen(df: pd.DataFrame):
     resumen = (
@@ -208,7 +442,6 @@ def tabla_resumen(df: pd.DataFrame):
         resumen[col] = resumen[col].map(
             lambda x: f"{x:.2f}" if pd.notna(x) else "-"
         )
-
 
     st.caption(
         t(
