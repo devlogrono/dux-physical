@@ -17,7 +17,7 @@ def generar_valores_antropometria():
         "ajuste_adiposa_pct": grasa,
         "ajuste_muscular_pct": muscular,
         "masa_osea_kg": masa_osea,
-        "indice_musculo_oseo": imo,
+        "idx_musculo_oseo": imo,
     }
 
 def generar_fechas(

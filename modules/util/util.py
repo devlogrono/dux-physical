@@ -16,6 +16,9 @@ from modules.i18n.i18n import t
 import json
 from difflib import SequenceMatcher
 
+def _title(name: str) -> str:
+    return str(name).title()
+
 def compare_names(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 

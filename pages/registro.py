@@ -19,7 +19,6 @@ is_valid = validate_login()
 
 st.header(t("Registro"), divider="red")
 
-
 # Load reference data
 records_df = get_records_db()
 jug_df = load_players_db()

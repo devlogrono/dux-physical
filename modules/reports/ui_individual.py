@@ -94,7 +94,7 @@ def graficos_individuales(df: pd.DataFrame):
     tabs = st.tabs([
         t("Peso y grasa"),
         t("Composición corporal"),
-        t("Índice músculo–óseo")
+        t("Índice músculo-óseo")
     ])
 
     with tabs[0]:

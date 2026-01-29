@@ -45,7 +45,7 @@ def metricas(df: pd.DataFrame) -> None:
     with k5:
         st.metric(t("Masa ósea (kg)"), _fmt(ultimo.get("masa_osea_kg"), "kg"))
     with k6:
-        st.metric(t("Índice M/O"), _fmt(ultimo.get("indice_musculo_oseo"), ""))
+        st.metric(t("Índice M/O"), _fmt(ultimo.get("idx_musculo_oseo"), ""))
 
     # -----------------------------
     # Resumen técnico interpretado
@@ -57,7 +57,7 @@ def _get_resumen_tecnico_antropometria(df: pd.DataFrame) -> str:
     last = df.iloc[-1]
 
     grasa = last.get("ajuste_adiposa_pct")
-    imo = last.get("indice_musculo_oseo")
+    imo = last.get("idx_musculo_oseo")
 
     def c(txt, col):
         return f"<b style='color:{col}'>{txt}</b>"
@@ -108,7 +108,7 @@ def _prepare_antropometria_df(df: pd.DataFrame) -> pd.DataFrame:
         "ajuste_adiposa_pct",
         "ajuste_muscular_pct",
         "masa_osea_kg",
-        "indice_musculo_oseo",
+        "idx_musculo_oseo",
     ]
 
     for col in cols_numericas:
@@ -329,8 +329,7 @@ def grafico_indice_musculo_oseo(df):
         st.info(t("No hay datos suficientes."))
         return
 
-    usar_barras = len(df) == 2
-
+    usar_barras = len(df) <= 2
     fig = go.Figure()
 
     if usar_barras:
@@ -338,7 +337,7 @@ def grafico_indice_musculo_oseo(df):
             x=df["fecha"],
             y=df["idx_musculo_oseo"],
             name=t("Índice músculo-óseo"),
-            width=0.3,
+            width=0.6,  # ⬅️ más ancho para datetime
             showlegend=True
         )
     else:
@@ -349,18 +348,24 @@ def grafico_indice_musculo_oseo(df):
             mode="lines+markers",
             showlegend=True
         ))
-    
-    xmin = df["fecha"].min()
-    xmax = df["fecha"].max()
 
-    if pd.notna(xmin) and pd.notna(xmax):
-        fig.update_xaxes(range=[xmin, xmax])
+    # 🔑 SOLO fijar rango si hay más de 1 fecha distinta
+    fechas_unicas = df["fecha"].nunique()
+
+    if fechas_unicas > 1:
+        fig.update_xaxes(
+            range=[df["fecha"].min(), df["fecha"].max()]
+        )
 
     fig.update_layout(
         template="plotly_white",
         yaxis_title=t("Índice M/O"),
-        xaxis=dict(tickformat="%d %b %Y"),
+        xaxis=dict(
+            tickformat="%d %b %Y",
+            type="date"
+        ),
         legend=dict(orientation="h", y=-0.3),
+        bargap=0.4,
         showlegend=True
     )
 
