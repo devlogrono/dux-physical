@@ -374,7 +374,7 @@ class ISAKPresentation:
         c4.write("—" if c.get("ajuste_adiposa", {}).get("pct") is None else f"{c['ajuste_adiposa']['pct']:.2f}")
         c5.write("—" if c.get("ajuste_muscular", {}).get("pct") is None else f"{c['ajuste_muscular']['pct']:.2f}")
         c6.write("—" if c.get("ajuste_osea", {}).get("masa_ajustada_kg") is None else f"{c['ajuste_osea']['masa_ajustada_kg']:.2f}")
-        c3.write("—" if c.get("idx_musculo_oseo") is None else f"{c['idx_musculo_oseo']:.2f}")
+        c7.write("—" if c.get("idx_musculo_oseo") is None else f"{c['idx_musculo_oseo']:.2f}")
 
     # --------------------------------------------------------
     # API PÚBLICA

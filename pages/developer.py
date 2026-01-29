@@ -1,3 +1,5 @@
+import os
+import pandas as pd
 import streamlit as st
 import bcrypt
 import time
@@ -58,6 +60,7 @@ tabs = st.tabs([
     t(":material/user_attributes: Usuarios"),
     t(":material/description: Utilidades"),
     t(":material/science: Generador Antropometría"),
+    t(":material/upload: Leer Excel")
 ])
 
 # ============================================================
@@ -280,3 +283,55 @@ with tabs[2]:
         finally:
             st.session_state.dev_gen_running = False
             st.session_state.dev_gen_stop = False
+
+with tabs[3]:
+    st.subheader("📂 Leer archivo Excel")
+
+    uploaded_file = st.file_uploader(
+        "Cargar archivo Excel",
+        type=["xlsx", "xls"],
+        accept_multiple_files=False
+    )
+
+    if uploaded_file is None:
+        st.info("Carga un archivo .xls o .xlsx para visualizar su contenido")
+        st.stop()
+
+    try:
+        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+
+        # Selección automática del engine
+        if file_ext == ".xls":
+            engine = "xlrd"
+        else:
+            engine = "openpyxl"
+
+        # Leer Excel
+        xls = pd.ExcelFile(uploaded_file, engine=engine)
+
+        sheet_name = st.selectbox(
+            "Selecciona la hoja",
+            options=xls.sheet_names
+        )
+
+        df = pd.read_excel(
+            xls,
+            sheet_name=sheet_name
+        )
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Filas", df.shape[0])
+        col2.metric("Columnas", df.shape[1])
+        col3.metric("Hoja", sheet_name)
+
+        st.divider()
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    except Exception as e:
+        st.error("Error al leer el archivo Excel")
+        st.exception(e)

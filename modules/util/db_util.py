@@ -6,7 +6,7 @@ from modules.util.util import data_format, expand_all_json_columns
 
 def get_isak():
     df_raw = get_isak_full(as_df=True)
-
+    
     if df_raw.empty:
         return df_raw
 

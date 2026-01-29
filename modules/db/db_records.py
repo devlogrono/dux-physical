@@ -31,7 +31,7 @@ def get_records_db(as_df: bool = True):
           AND f.id_estado = 1
           AND i.estatus_id IN (1, 2)
 
-        ORDER BY i.fecha_medicion DESC;
+        ORDER BY i.fecha_medicion DESC limit 1;
     """
 
     rows = query(sql)
@@ -47,6 +47,7 @@ def get_records_db(as_df: bool = True):
     else:
         df = df[df["usuario"] != "developer"]
 
+    #st.dataframe(df)
     df.insert(
         2,
         "nombre_jugadora",
@@ -514,7 +515,7 @@ def get_isak_full(as_df: bool = True):
     """
 
     base_df = get_records_db(as_df=True)
-
+    
     if base_df.empty:
         return base_df if as_df else []
 

@@ -69,6 +69,24 @@ def filter_df_by_period(df: pd.DataFrame, periodo: str):
     if df.empty:
         return df.copy(), ""
 
+    df = df.copy()
+
+    # -------------------------
+    # Normalizar fecha_medicion
+    # -------------------------
+    df["fecha_medicion"] = pd.to_datetime(
+        df["fecha_medicion"],
+        errors="coerce"
+    )
+
+    df = df.dropna(subset=["fecha_medicion"])
+
+    if df.empty:
+        return df.copy(), ""
+
+    # -------------------------
+    # Lógica de filtrado
+    # -------------------------
     if periodo == "Última sesión":
         df_sorted = df.sort_values("fecha_medicion")
         df_filtrado = (
@@ -81,12 +99,17 @@ def filter_df_by_period(df: pd.DataFrame, periodo: str):
 
     else:  # Histórico (6 meses)
         fecha_max = df["fecha_medicion"].max()
+        limite = fecha_max - pd.Timedelta(days=180)
+
         df_filtrado = df[
-            df["fecha_medicion"] >= (fecha_max - pd.Timedelta(days=180))
+            df["fecha_medicion"] >= limite
         ].copy()
+
         texto = t("últimos 6 meses")
 
+    # -------------------------
     # Orden final
+    # -------------------------
     df_filtrado = df_filtrado.sort_values(
         by="fecha_medicion", ascending=False
     ).reset_index(drop=True)

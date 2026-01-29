@@ -2,6 +2,7 @@ import streamlit as st
 
 from modules.db.db_competitions import load_competitions_db
 from modules.db.db_players import load_players_db
+from modules.db.db_records import get_records_db
 from modules.util.db_util import get_isak
 from modules.util.util import clean_df, data_format
 from modules.ui.ui_app import (
@@ -20,6 +21,8 @@ st.header(t("Resumen de :red[1er Equipo]"), divider="red")
 # CARGA DE DATOS
 # ============================================================
 df_records = get_isak()
+
+#records_df = get_records_db()
 #st.dataframe(df_records)
 
 if df_records.empty:

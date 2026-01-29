@@ -39,6 +39,7 @@ def dialog_confirmar_registro(record, jugadora):
             # ---------------------------------------
             if st.session_state.get("submitted"):
                 del st.session_state["submitted"]
+                st.cache_data.clear()
                 st.session_state["target_page"] = "registro"
                 time.sleep(2)  # Pequeña pausa para evitar conflictos
                 st.switch_page("pages/switch.py")
