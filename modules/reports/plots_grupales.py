@@ -100,7 +100,7 @@ def plot_comparacion_mediciones(df: pd.DataFrame):
         .agg(
             peso=("peso_bruto_kg", "mean"),
             pliegues=("suma_6_pliegues_mm", "mean"),
-            imo=("indice_musculo_oseo", "mean"),
+            imo=("idx_musculo_oseo", "mean"),
         )
     )
 
