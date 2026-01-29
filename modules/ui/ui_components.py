@@ -155,7 +155,14 @@ def select_jugadora_simple(
     persist: bool = False,
 ):
     if jug_df_filtrado.empty:
-        st.warning(t("No hay jugadoras disponibles"))
+        st.selectbox(
+            t("Jugadora"),
+            options=[],
+            index=None,
+            placeholder=t("No hay jugadoras disponibles"),
+            disabled=True,
+            key=key,
+        )
         return None
 
     nombres = (
