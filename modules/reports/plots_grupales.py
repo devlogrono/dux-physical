@@ -416,7 +416,7 @@ def plot_perfil_antropometrico(df: pd.DataFrame):
     #st.dataframe(df[["identificacion", "nombre_jugadora", "fecha_sesion"]], hide_index=True)
     df = filter_last_record_per_player(df)
     #st.text("Último registro por jugadora:")
-    st.dataframe(df[["identificacion", "nombre_jugadora", "fecha_sesion"]], hide_index=True)
+    #st.dataframe(df[["identificacion", "nombre_jugadora", "fecha_sesion"]], hide_index=True)
 
     df = df.copy()
     df["x"] = pd.to_numeric(df["suma_6_pliegues_mm"], errors="coerce")
