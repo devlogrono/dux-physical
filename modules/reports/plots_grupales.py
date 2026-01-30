@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from modules.i18n.i18n import t
+from modules.util.records_util import filter_last_record_per_player
 from modules.util.util import _title
 
 REQUIRED = {"suma_6_pliegues_mm", "idx_musculo_oseo", "nombre_jugadora"}
@@ -75,11 +76,14 @@ def plot_distribuciones(df: pd.DataFrame):
         st.info(t("No hay métricas disponibles."))
         return
 
-    col = st.selectbox(
-        t("Seleccione la métrica"),
-        options=list(metricas.keys()),
-        format_func=lambda x: metricas[x],
-    )
+    col1, col2 = st.columns([2, 6])
+
+    with col1:
+        col = st.selectbox(
+            t("Seleccione la métrica"),
+            options=list(metricas.keys()),
+            format_func=lambda x: metricas[x],
+        )
 
     # -------------------------
     # Datos
@@ -272,161 +276,6 @@ def plot_comparacion_mediciones(df: pd.DataFrame):
         """
     )
 
-def plot_perfil_antropometrico(df: pd.DataFrame):
-
-    if not REQUIRED.issubset(df.columns):
-        st.warning(t("No hay datos suficientes para generar el perfil antropométrico."))
-        return
-
-    df = df.copy()
-    df["x"] = pd.to_numeric(df["suma_6_pliegues_mm"], errors="coerce")
-    df["y"] = pd.to_numeric(df["idx_musculo_oseo"], errors="coerce")
-    df = df.dropna(subset=["x", "y"])
-
-    if df.empty:
-        st.info(t("No hay valores válidos para el perfil antropométrico."))
-        return
-
-    df[["grupo", "color"]] = df.apply(
-        lambda r: pd.Series(cuadrante(r)), axis=1
-    )
-
-    # Label final
-    df["label"] = df.apply(
-        lambda r: f'{r["nombre_jugadora"].title()} ({r["x"]:.1f}; {r["y"]:.2f})',
-        axis=1
-    )
-
-    # -------------------------
-    # FIGURA
-    # -------------------------
-    fig = go.Figure()
-
-    # --- SOLO puntos ---
-    fig.add_trace(go.Scatter(
-        x=df["x"],
-        y=df["y"],
-        mode="markers",
-        marker=dict(
-            size=10,
-            color=df["color"],
-            line=dict(width=1, color="white"),
-        ),
-        hovertemplate=(
-            "<b>%{customdata}</b><br>"
-            + t("Suma 6 pliegues") + ": %{x:.1f} mm<br>"
-            + t("Índice músculo/óseo") + ": %{y:.2f}<extra></extra>"
-        ),
-        customdata=df["label"],
-        showlegend=False,
-    ))
-
-
-    offset_index = 0
-
-    for _, row in df.iterrows():
-
-        if needs_arrow(row, df):
-            ax, ay = OFFSET_POSITIONS[offset_index % len(OFFSET_POSITIONS)]
-            offset_index += 1
-
-            fig.add_annotation(
-                x=row["x"],
-                y=row["y"],
-                text=row["label"],
-                showarrow=True,
-                arrowhead=2,
-                arrowwidth=1,
-                arrowcolor="#424245",
-                ax=ax,
-                ay=ay,
-                font=dict(size=9, color="#424245"),
-                bgcolor="rgba(255,255,255,0)",
-                borderpad=2,
-            )
-        else:
-            fig.add_annotation(
-                x=row["x"],
-                y=row["y"],
-                text=row["label"],
-                showarrow=False,
-                yshift=10,
-                font=dict(size=9, color="#374151"),
-            )
-
-    # -------------------------
-    # LÍNEAS DE CORTE
-    # -------------------------
-    fig.add_vline(x=X_CORTE, line_width=1.2, line_color="#9CA3AF")
-    fig.add_hline(y=Y_CORTE, line_width=1.2, line_color="#9CA3AF")
-
-    # -------------------------
-    # ETIQUETAS DE CUADRANTE
-    # -------------------------
-    fig.add_annotation(x=40,  y=4.4, text="<b>G1</b>", showarrow=False)
-    fig.add_annotation(x=115, y=4.4, text="<b>G2</b>", showarrow=False)
-    fig.add_annotation(x=40,  y=3.3, text="<b>G3</b>", showarrow=False)
-    fig.add_annotation(x=115, y=3.3, text="<b>G4</b>", showarrow=False)
-
-    # -------------------------
-    # ESTILO GENERAL
-    # -------------------------
-    fig.update_layout(
-        title=dict(
-            text=t("Perfil antropométrico grupal"),
-            x=0.02,
-            font=dict(size=18),
-        ),
-        xaxis=dict(
-            title=t("Suma 6 pliegues (mm)"),
-            range=[X_MIN, X_MAX],
-            gridcolor="#ECF0F1",
-        ),
-        yaxis=dict(
-            title=t("Índice músculo / óseo"),
-            range=[Y_MIN, Y_MAX],
-            gridcolor="#ECF0F1",
-        ),
-        template="plotly_white",
-        height=650,
-        margin=dict(l=40, r=40, t=80, b=40),
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    get_interpretacion()
-
-def get_interpretacion():
-
-    with st.expander(t("Interpretación del perfil antropométrico"), expanded=False):
-
-        st.markdown(
-            f"""
-            <div style="line-height:1.6">
-
-            <span style="color:#2ECC71;"><b>G1 · Alto en músculo / Bajo en grasa</b></span><br>
-            Perfil corporal óptimo para el rendimiento deportivo. Se asocia a una mayor eficiencia mecánica,
-            buena potencia relativa y menor lastre corporal.
-
-            <span style="color:#F1C40F;"><b>G2 · Alto en músculo / Alto en grasa</b></span><br>
-            Buen desarrollo muscular con margen de mejora en la composición corporal.
-            Existe potencial de optimización reduciendo masa grasa sin comprometer la masa muscular.
-
-            <span style="color:#F39C12;"><b>G3 · Bajo en músculo / Bajo en grasa</b></span><br>
-            Perfil corporal ligero con posible déficit estructural.
-            Puede limitar la producción de fuerza y la tolerancia a contactos, siendo recomendable un trabajo
-            orientado al desarrollo muscular.
-
-            <span style="color:#E74C3C;"><b>G4 · Bajo en músculo / Alto en grasa</b></span><br>
-            Perfil menos favorable para el rendimiento físico.
-            Puede afectar a la eficiencia del movimiento y aumentar el lastre corporal,
-            siendo prioritaria la intervención desde el entrenamiento y la nutrición.
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
 def tabla_resumen(df: pd.DataFrame):
     resumen = (
         df.groupby("nombre_jugadora", as_index=False)
@@ -460,3 +309,364 @@ def tabla_resumen(df: pd.DataFrame):
         }),
         hide_index=True,
     )
+
+##########################
+
+def get_interpretacion():
+
+    with st.expander(t("Interpretación del perfil antropométrico"), expanded=False):
+
+        st.markdown(
+            f"""
+            <div style="line-height:1.6">
+
+            <span style="color:#2ECC71;"><b>G1 · Alto en músculo / Bajo en grasa</b></span><br>
+            Perfil corporal óptimo para el rendimiento deportivo. Se asocia a una mayor eficiencia mecánica,
+            buena potencia relativa y menor lastre corporal.
+
+            <span style="color:#F1C40F;"><b>G2 · Alto en músculo / Alto en grasa</b></span><br>
+            Buen desarrollo muscular con margen de mejora en la composición corporal.
+            Existe potencial de optimización reduciendo masa grasa sin comprometer la masa muscular.
+
+            <span style="color:#F39C12;"><b>G3 · Bajo en músculo / Bajo en grasa</b></span><br>
+            Perfil corporal ligero con posible déficit estructural.
+            Puede limitar la producción de fuerza y la tolerancia a contactos, siendo recomendable un trabajo
+            orientado al desarrollo muscular.
+
+            <span style="color:#E74C3C;"><b>G4 · Bajo en músculo / Alto en grasa</b></span><br>
+            Perfil menos favorable para el rendimiento físico.
+            Puede afectar a la eficiencia del movimiento y aumentar el lastre corporal,
+            siendo prioritaria la intervención desde el entrenamiento y la nutrición.
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+def configurar_labels_perfil(df: pd.DataFrame) -> dict:
+    """
+    Devuelve la configuración seleccionada para mostrar etiquetas.
+    """
+    with st.expander(t(":material/settings: Opciones avanzadas de etiquetas"), expanded=False):
+
+        col1, col2, _ = st.columns([1.2, 2, 2])
+
+        with col1:
+            modo = st.selectbox(
+                t("Configuración de etiquetas"),
+                options=[
+                    "Mostrar Todas",
+                    "Por cuadrante",
+                    "Seleccionar Jugadoras",
+                    "Ocultar todas",
+                ],
+                index=0,
+            )
+
+        cuadrantes = []
+        jugadoras = []
+
+        with col2:
+            if modo == "Por cuadrante":
+                cuadrantes = st.multiselect(
+                    t("Cuadrantes"),
+                    options=["G1", "G2", "G3", "G4"],
+                    default=["G1"],
+                )
+
+            elif modo == "Seleccionar Jugadoras":
+                jugadoras = st.multiselect(
+                    t("Jugadoras"),
+                    options=sorted(df["nombre_jugadora"].unique()),
+                    placeholder=t("Seleccione jugadoras para mostrar etiquetas"),
+                )
+
+    return {
+        "modo": modo,
+        "cuadrantes": cuadrantes,
+        "jugadoras": jugadoras,
+    }
+
+def filtrar_df_labels(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    modo = cfg["modo"]
+
+    if modo == "Ocultar todas":
+        return df.iloc[0:0]
+
+    if modo == "Todas":
+        return df
+
+    if modo == "Por cuadrante":
+        return df[df["grupo"].isin(cfg["cuadrantes"])]
+
+    if modo == "Seleccionar Jugadoras":
+        return df[df["nombre_jugadora"].isin(cfg["jugadoras"])]
+
+    return df
+
+def plot_perfil_antropometrico(df: pd.DataFrame):
+
+    if not REQUIRED.issubset(df.columns):
+        st.warning(t("No hay datos suficientes para generar el perfil antropométrico."))
+        return
+
+    # --------------------------------------------------
+    # FILTRO: ÚLTIMO REGISTRO POR JUGADORA
+    # --------------------------------------------------
+    #st.dataframe(df[["identificacion", "nombre_jugadora", "fecha_sesion"]], hide_index=True)
+    df = filter_last_record_per_player(df)
+    #st.text("Último registro por jugadora:")
+    st.dataframe(df[["identificacion", "nombre_jugadora", "fecha_sesion"]], hide_index=True)
+
+    df = df.copy()
+    df["x"] = pd.to_numeric(df["suma_6_pliegues_mm"], errors="coerce")
+    df["y"] = pd.to_numeric(df["idx_musculo_oseo"], errors="coerce")
+    df = df.dropna(subset=["x", "y"])
+
+    if df.empty:
+        st.info(t("No hay valores válidos para el perfil antropométrico."))
+        return
+
+    df[["grupo", "color"]] = df.apply(
+        lambda r: pd.Series(cuadrante(r)), axis=1
+    )
+
+    df["label"] = df.apply(
+        lambda r: f'{r["nombre_jugadora"].title()} ({r["x"]:.1f}; {r["y"]:.2f})',
+        axis=1
+    )
+
+    # --------------------------------------------------
+    # CONFIGURACIÓN DE ETIQUETAS (UI)
+    # --------------------------------------------------
+    cfg_labels = configurar_labels_perfil(df)
+    df_labels = filtrar_df_labels(df, cfg_labels)
+
+    # --------------------------------------------------
+    # FIGURA
+    # --------------------------------------------------
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=df["x"],
+        y=df["y"],
+        mode="markers",
+        marker=dict(
+            size=10,
+            color=df["color"],
+            line=dict(width=1, color="white"),
+        ),
+        hovertemplate=(
+            "<b>%{customdata}</b><br>"
+            + t("Suma 6 pliegues") + ": %{x:.1f} mm<br>"
+            + t("Índice músculo/óseo") + ": %{y:.2f}<extra></extra>"
+        ),
+        customdata=df["label"],
+        showlegend=False,
+    ))
+
+    # --------------------------------------------------
+    # ANOTACIONES
+    # --------------------------------------------------
+    offset_index = 0
+
+    for _, row in df_labels.iterrows():
+
+        if needs_arrow(row, df):
+            ax, ay = OFFSET_POSITIONS[offset_index % len(OFFSET_POSITIONS)]
+            offset_index += 1
+
+            fig.add_annotation(
+                x=row["x"],
+                y=row["y"],
+                text=row["label"],
+                showarrow=True,
+                arrowhead=2,
+                arrowwidth=1,
+                arrowcolor="#424245",
+                ax=ax,
+                ay=ay,
+                font=dict(size=9, color="#424245"),
+                bgcolor="rgba(255,255,255,0)",
+                borderpad=2,
+            )
+        else:
+            fig.add_annotation(
+                x=row["x"],
+                y=row["y"],
+                text=row["label"],
+                showarrow=False,
+                yshift=10,
+                font=dict(size=9, color="#374151"),
+            )
+
+    # --------------------------------------------------
+    # ELEMENTOS FIJOS
+    # --------------------------------------------------
+    fig.add_vline(x=X_CORTE, line_width=1.2, line_color="#9CA3AF")
+    fig.add_hline(y=Y_CORTE, line_width=1.2, line_color="#9CA3AF")
+
+    fig.add_annotation(x=40,  y=4.4, text="<b>G1</b>", showarrow=False)
+    fig.add_annotation(x=115, y=4.4, text="<b>G2</b>", showarrow=False)
+    fig.add_annotation(x=40,  y=3.3, text="<b>G3</b>", showarrow=False)
+    fig.add_annotation(x=115, y=3.3, text="<b>G4</b>", showarrow=False)
+
+    y_min = min(Y_MIN, df["y"].min() - 0.1)
+    y_max = max(Y_MAX, df["y"].max() + 0.1)
+
+    fig.update_layout(
+        title=dict(
+            text=t("Perfil antropométrico grupal"),
+            x=0.02,
+            font=dict(size=18),
+        ),
+        xaxis=dict(
+            title=t("Suma 6 pliegues (mm)"),
+            range=[X_MIN, X_MAX],
+            gridcolor="#ECF0F1",
+        ),
+        yaxis=dict(
+            title=t("Índice músculo / óseo"),
+            range=[y_min, y_max],
+            gridcolor="#ECF0F1",
+        ),
+        template="plotly_white",
+        height=650,
+        margin=dict(l=40, r=40, t=80, b=40),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    get_interpretacion()
+
+
+# def plot_perfil_antropometrico(df: pd.DataFrame):
+
+#     if not REQUIRED.issubset(df.columns):
+#         st.warning(t("No hay datos suficientes para generar el perfil antropométrico."))
+#         return
+
+#     df = df.copy()
+#     df["x"] = pd.to_numeric(df["suma_6_pliegues_mm"], errors="coerce")
+#     df["y"] = pd.to_numeric(df["idx_musculo_oseo"], errors="coerce")
+#     df = df.dropna(subset=["x", "y"])
+
+#     #st.dataframe(df["idx_musculo_oseo"])
+
+#     if df.empty:
+#         st.info(t("No hay valores válidos para el perfil antropométrico."))
+#         return
+
+#     df[["grupo", "color"]] = df.apply(
+#         lambda r: pd.Series(cuadrante(r)), axis=1
+#     )
+
+#     # Label final
+#     df["label"] = df.apply(
+#         lambda r: f'{r["nombre_jugadora"].title()} ({r["x"]:.1f}; {r["y"]:.2f})',
+#         axis=1
+#     )
+
+#     # st.write(
+#     #     df[["nombre_jugadora", "x", "y"]]
+#     # )
+#     # -------------------------
+#     # FIGURA
+#     # -------------------------
+#     fig = go.Figure()
+
+#     # --- SOLO puntos ---
+#     fig.add_trace(go.Scatter(
+#         x=df["x"],
+#         y=df["y"],
+#         mode="markers",
+#         marker=dict(
+#             size=10,
+#             color=df["color"],
+#             line=dict(width=1, color="white"),
+#         ),
+#         hovertemplate=(
+#             "<b>%{customdata}</b><br>"
+#             + t("Suma 6 pliegues") + ": %{x:.1f} mm<br>"
+#             + t("Índice músculo/óseo") + ": %{y:.2f}<extra></extra>"
+#         ),
+#         customdata=df["label"],
+#         showlegend=False,
+#     ))
+
+
+#     offset_index = 0
+
+#     for _, row in df.iterrows():
+
+#         if needs_arrow(row, df):
+#             ax, ay = OFFSET_POSITIONS[offset_index % len(OFFSET_POSITIONS)]
+#             offset_index += 1
+
+#             fig.add_annotation(
+#                 x=row["x"],
+#                 y=row["y"],
+#                 text=row["label"],
+#                 showarrow=True,
+#                 arrowhead=2,
+#                 arrowwidth=1,
+#                 arrowcolor="#424245",
+#                 ax=ax,
+#                 ay=ay,
+#                 font=dict(size=9, color="#424245"),
+#                 bgcolor="rgba(255,255,255,0)",
+#                 borderpad=2,
+#             )
+#         else:
+#             fig.add_annotation(
+#                 x=row["x"],
+#                 y=row["y"],
+#                 text=row["label"],
+#                 showarrow=False,
+#                 yshift=10,
+#                 font=dict(size=9, color="#374151"),
+#             )
+
+#     # -------------------------
+#     # LÍNEAS DE CORTE
+#     # -------------------------
+#     fig.add_vline(x=X_CORTE, line_width=1.2, line_color="#9CA3AF")
+#     fig.add_hline(y=Y_CORTE, line_width=1.2, line_color="#9CA3AF")
+
+#     # -------------------------
+#     # ETIQUETAS DE CUADRANTE
+#     # -------------------------
+#     fig.add_annotation(x=40,  y=4.4, text="<b>G1</b>", showarrow=False)
+#     fig.add_annotation(x=115, y=4.4, text="<b>G2</b>", showarrow=False)
+#     fig.add_annotation(x=40,  y=3.3, text="<b>G3</b>", showarrow=False)
+#     fig.add_annotation(x=115, y=3.3, text="<b>G4</b>", showarrow=False)
+
+#     y_min = min(Y_MIN, df["y"].min() - 0.1)
+#     y_max = max(Y_MAX, df["y"].max() + 0.1)
+#     # -------------------------
+#     # ESTILO GENERAL
+#     # -------------------------
+#     fig.update_layout(
+#         title=dict(
+#             text=t("Perfil antropométrico grupal"),
+#             x=0.02,
+#             font=dict(size=18),
+#         ),
+#         xaxis=dict(
+#             title=t("Suma 6 pliegues (mm)"),
+#             range=[X_MIN, X_MAX],
+#             gridcolor="#ECF0F1",
+#         ),
+#         yaxis=dict(
+#             title=t("Índice músculo / óseo"),
+#             range=[y_min, y_max],
+#             gridcolor="#ECF0F1",
+#         ),
+#         template="plotly_white",
+#         height=650,
+#         margin=dict(l=40, r=40, t=80, b=40),
+#     )
+
+#     st.plotly_chart(fig, use_container_width=True)
+
+#     get_interpretacion()
