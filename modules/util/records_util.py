@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 import random
 from datetime import timedelta, date
@@ -19,6 +20,21 @@ def generar_valores_antropometria():
         "masa_osea_kg": masa_osea,
         "idx_musculo_oseo": imo,
     }
+
+def filter_last_record_per_player(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Devuelve solo el último registro (fecha más reciente) por jugadora.
+    """
+    if "identificacion" not in df.columns or "fecha_sesion" not in df.columns:
+        return df
+
+    return (
+        df.sort_values("fecha_sesion")
+          .groupby("identificacion", as_index=False)
+          .tail(1)
+          .reset_index(drop=True)
+    )
+
 
 def generar_fechas(
     fecha_inicio: date,

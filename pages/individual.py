@@ -36,4 +36,5 @@ if df_filtrado is None or df_filtrado.empty:
 
 metricas(df_filtrado)
 
+
 graficos_individuales(df_filtrado)

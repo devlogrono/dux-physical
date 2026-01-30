@@ -287,33 +287,45 @@ def _alerta_tendencia_grasa(df: pd.DataFrame):
 
 def grafico_composicion(df):
     df = _prepare_antropometria_df(df)
+
+    if df.empty:
+        st.info(t("No hay datos suficientes."))
+        return
+
+    df = df.sort_values("fecha").reset_index(drop=True).copy()
+
+    # X indexada
+    df["x_idx"] = df.index
+    df["fecha_label"] = df["fecha"].dt.strftime("%d %b %Y")
+
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=df["fecha"],
+        x=df["x_idx"],
         y=df["ajuste_adiposa_pct"],
         name=t("% Grasa"),
         mode="lines+markers"
     ))
 
     fig.add_trace(go.Scatter(
-        x=df["fecha"],
+        x=df["x_idx"],
         y=df["ajuste_muscular_pct"],
         name=t("% Muscular"),
         mode="lines+markers"
     ))
 
-    xmin = df["fecha"].min()
-    xmax = df["fecha"].max()
-
-    if pd.notna(xmin) and pd.notna(xmax):
-        fig.update_xaxes(range=[xmin, xmax])
+    # -------------------------
+    # EJE X CONTROLADO
+    # -------------------------
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=df["x_idx"],
+        ticktext=df["fecha_label"],
+        title=t("Fecha de medición"),
+        range=[-0.5, len(df) - 0.5],
+    )
 
     fig.update_layout(
-        xaxis=dict(
-            type="date",
-            tickformat="%d %b %Y"
-        ),
         template="plotly_white",
         yaxis_title=t("Porcentaje (%)"),
         legend=dict(orientation="h", y=-0.3),
@@ -322,52 +334,68 @@ def grafico_composicion(df):
 
     st.plotly_chart(fig, use_container_width=True)
 
-def grafico_indice_musculo_oseo(df):
+def grafico_indice_musculo_oseo(df: pd.DataFrame):
     df = _prepare_antropometria_df(df)
 
     if df.empty:
         st.info(t("No hay datos suficientes."))
         return
 
-    usar_barras = len(df) <= 2
+    df = df.sort_values("fecha").reset_index(drop=True).copy()
+
+    # X indexada (control total del espaciado)
+    df["x_idx"] = df.index
+    df["fecha_label"] = df["fecha"].dt.strftime("%d %b %Y")
+
     fig = go.Figure()
 
-    if usar_barras:
-        fig.add_bar(
-            x=df["fecha"],
-            y=df["idx_musculo_oseo"],
-            name=t("Índice músculo-óseo"),
-            width=0.6,  # ⬅️ más ancho para datetime
-            showlegend=True
-        )
+    # -------------------------
+    # MODO DE TRAZA
+    # -------------------------
+    if len(df) == 1:
+        mode = "markers+text"
+    elif len(df) == 2:
+        mode = "lines+markers+text"
     else:
-        fig.add_trace(go.Scatter(
-            x=df["fecha"],
-            y=df["idx_musculo_oseo"],
-            name=t("Índice músculo-óseo"),
-            mode="lines+markers",
-            showlegend=True
-        ))
+        mode = "lines+markers"
 
-    # 🔑 SOLO fijar rango si hay más de 1 fecha distinta
-    fechas_unicas = df["fecha"].nunique()
-
-    if fechas_unicas > 1:
-        fig.update_xaxes(
-            range=[df["fecha"].min(), df["fecha"].max()]
-        )
-
-    fig.update_layout(
-        template="plotly_white",
-        yaxis_title=t("Índice M/O"),
-        xaxis=dict(
-            tickformat="%d %b %Y",
-            type="date"
+    fig.add_trace(go.Scatter(
+        x=df["x_idx"],
+        y=df["idx_musculo_oseo"],
+        mode=mode,
+        text=[f"{v:.2f}" for v in df["idx_musculo_oseo"]] if len(df) <= 2 else None,
+        textposition="top center",
+        marker=dict(
+            size=12 if len(df) <= 2 else 8,
+            color="#2563EB",
+            line=dict(width=1, color="white"),
         ),
-        legend=dict(orientation="h", y=-0.3),
-        bargap=0.4,
-        showlegend=True
+        line=dict(
+            width=2,
+            color="#2563EB",
+        ),
+        showlegend=False
+    ))
+
+    # -------------------------
+    # EJE X CONTROLADO
+    # -------------------------
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=df["x_idx"],
+        ticktext=df["fecha_label"],
+        title=t("Fecha de medición"),
+        range=[-0.5, len(df) - 0.5],
     )
 
-    st.plotly_chart(fig)
+    # -------------------------
+    # ESTILO GENERAL
+    # -------------------------
+    fig.update_layout(
+        template="plotly_white",
+        height=420,
+        margin=dict(l=40, r=40, t=40, b=40),
+        yaxis_title=t("Índice músculo / óseo"),
+    )
 
+    st.plotly_chart(fig, use_container_width=True)
