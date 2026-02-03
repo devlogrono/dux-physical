@@ -251,7 +251,7 @@ def selection_header(jug_df, comp_df, records_df=None, modo="reporte"):
         hoy = datetime.date.today()
         start, end = get_date_range_input(
             t("Rango de fechas"),
-            start_default=hoy - datetime.timedelta(days=15),
+            start_default=hoy - datetime.timedelta(days=60),
             end_default=hoy,
         )
 
