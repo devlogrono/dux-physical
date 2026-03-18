@@ -255,7 +255,7 @@ def grafico_peso_grasa(
         showlegend=True
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig)
 
     _alerta_tendencia_grasa(df)
 
@@ -332,7 +332,7 @@ def grafico_composicion(df):
         showlegend=True
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig)
 
 def grafico_indice_musculo_oseo(df: pd.DataFrame):
     df = _prepare_antropometria_df(df)
@@ -398,4 +398,4 @@ def grafico_indice_musculo_oseo(df: pd.DataFrame):
         yaxis_title=t("Índice músculo / óseo"),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig)
