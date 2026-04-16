@@ -42,7 +42,7 @@ def get_records_db(as_df: bool = True):
     df["fecha_medicion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
 
     # DEBUG
-    modo_debug_all_data = True
+    modo_debug_all_data = False
 
     if not modo_debug_all_data:
         rol = st.session_state["auth"]["rol"].lower()
