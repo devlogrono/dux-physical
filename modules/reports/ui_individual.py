@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
-from modules.reports.plots_individuales import grafico_composicion, grafico_indice_musculo_oseo, grafico_peso_grasa
+from modules.reports.plots_individuales import (grafico_composicion, grafico_indice_musculo_oseo,
+grafico_peso_grasa,  grafico_suma_pliegues,grafico_pliegue_individual, grafico_perfil_estructural,resumen_ratios_estructurales )
 from modules.util.util import (get_photo, clean_image_url, calcular_edad)
 from modules.i18n.i18n import t
+from modules.reports.plots_grupales import plot_perfil_antropometrico, plot_mapa_estructural
 
 def player_block_dux(jugadora_seleccionada: dict, unavailable="N/A"):
     """Muestra el bloque visual con la información principal de la jugadora."""
@@ -81,7 +83,7 @@ def player_block_dux(jugadora_seleccionada: dict, unavailable="N/A"):
           
     #st.divider()
 
-def graficos_individuales(df: pd.DataFrame):
+def graficos_individuales(df: pd.DataFrame, df_equipo: pd.DataFrame, jugadora: dict):
 
     if df is None or df.empty:
         st.info(t("No hay datos disponibles para graficar."))
@@ -92,16 +94,34 @@ def graficos_individuales(df: pd.DataFrame):
     st.markdown(t("### **Gráficos**"))
 
     tabs = st.tabs([
+        t("Perfil antropométrico"),
         t("Peso y grasa"),
         t("Composición corporal"),
-        t("Índice músculo-óseo")
+        t("Índice músculo-óseo"),
+        t("Pliegues"),
+        t("Perfil estructural"),
     ])
 
     with tabs[0]:
-        grafico_peso_grasa(df)
+        plot_perfil_antropometrico(df_equipo, jugadora_destacada=jugadora["nombre_jugadora"])
 
     with tabs[1]:
-        grafico_composicion(df)
+        grafico_peso_grasa(df)
 
     with tabs[2]:
+        grafico_composicion(df)
+
+    with tabs[3]:
         grafico_indice_musculo_oseo(df)
+
+    with tabs[4]:
+        grafico_suma_pliegues(df)
+        st.divider()
+        grafico_pliegue_individual(df)
+
+    with tabs[5]:
+        resumen_ratios_estructurales(df)
+        st.divider()
+        plot_mapa_estructural(df_equipo, jugadora_destacada=jugadora["nombre_jugadora"])
+        st.divider()
+        grafico_perfil_estructural(df)

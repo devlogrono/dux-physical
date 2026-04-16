@@ -41,11 +41,16 @@ def get_records_db(as_df: bool = True):
     df = pd.DataFrame(rows)
     df["fecha_medicion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
 
-    rol = st.session_state["auth"]["rol"].lower()
-    if rol == "developer":
-        df = df[df["usuario"] == "developer"]
-    else:
-        df = df[df["usuario"] != "developer"]
+    # DEBUG
+    modo_debug_all_data = True
+
+    if not modo_debug_all_data:
+        rol = st.session_state["auth"]["rol"].lower()
+
+        if rol == "developer":
+            df = df[df["usuario"] == "developer"]
+        else:
+            df = df[df["usuario"] != "developer"]
 
     #st.dataframe(df)
     df.insert(
@@ -55,6 +60,15 @@ def get_records_db(as_df: bool = True):
     )
 
     df.drop(columns=["nombre", "apellido"], inplace=True, errors="ignore")
+    # st.write("DEBUG get_records_db")
+    # st.write("N filas:", len(df))
+    # st.write("Usuarios:", df["usuario"].dropna().unique().tolist() if "usuario" in df.columns else [])
+    # st.dataframe(
+    #     df[df["nombre_jugadora"] == "ANDREA COLOMINA MARINA"][
+    #         [c for c in ["id_isak", "nombre_jugadora", "fecha_medicion", "created_at", "usuario"] if c in df.columns]
+    #     ],
+    #     hide_index=True
+    # )
     return df if as_df else df.to_dict("records")
 
 def get_isak_basicos(id_isak: int) -> dict | None:
