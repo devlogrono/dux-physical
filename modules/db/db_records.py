@@ -41,16 +41,12 @@ def get_records_db(as_df: bool = True):
     df = pd.DataFrame(rows)
     df["fecha_medicion"] = pd.to_datetime(df["fecha_medicion"], errors="coerce")
 
-    # DEBUG
-    modo_debug_all_data = False
+    rol = st.session_state["auth"]["rol"].lower()
 
-    if not modo_debug_all_data:
-        rol = st.session_state["auth"]["rol"].lower()
-
-        if rol == "developer":
-            df = df[df["usuario"] == "developer"]
-        else:
-            df = df[df["usuario"] != "developer"]
+    if rol == "developer":
+        df = df[df["usuario"] == "developer"]
+    else:
+        df = df[df["usuario"] != "developer"]
 
     #st.dataframe(df)
     df.insert(
