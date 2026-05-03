@@ -7,8 +7,7 @@ from modules.util.db_util import get_isak
 from modules.util.util import clean_df, data_format
 from modules.ui.ui_app import (
     filter_df_by_period,
-    calc_metric_block,
-    render_metric_cards
+    calc_metric_block, compute_inicio_alert_kpis, render_inicio_alert_kpis,render_empeoramiento_table
 )
 
 from modules.i18n.i18n import t
@@ -41,11 +40,19 @@ comp_df = load_competitions_db()
 # INTERFAZ PRINCIPAL
 # ============================================================
 
+st.markdown(t("### **Alertas**"))
+st.caption(t("Basado en la última medición disponible de cada jugadora y su comparación con la anterior."))
+
+kpis_inicio = compute_inicio_alert_kpis(df_records)
+render_inicio_alert_kpis(kpis_inicio)
+st.divider()
+render_empeoramiento_table(df_records)
+# render_interpretacion_alertas_table()
+st.divider()
 # --- Fila principal de filtros ---
 col1, col2, _ = st.columns([2, 1.5, 1])
 
 with col1:
-    # Diccionario clave interna → texto traducido
     OPCIONES_PERIODO = {
         "Última sesión": t("Última sesión"),
         "Historico": t("Ultimos 6 meses"),
@@ -53,11 +60,23 @@ with col1:
 
     periodo_traducido = st.radio(
         t("Periodo:"),
-        list(OPCIONES_PERIODO.values()),horizontal=True,
-        index=list(OPCIONES_PERIODO.keys()).index("Última sesión"))
+        list(OPCIONES_PERIODO.values()),
+        horizontal=True,
+        index=list(OPCIONES_PERIODO.keys()).index("Última sesión")
+    )
 
     periodo = next(k for k, v in OPCIONES_PERIODO.items() if v == periodo_traducido)
     df_periodo, articulo = filter_df_by_period(df_records, periodo)
+
+
+
+    # st.write("Registros de Andrea en df_periodo")
+    # st.dataframe(
+    #     df_periodo[df_periodo["nombre_jugadora"] == "ANDREA COLOMINA MARINA"][
+    #         [c for c in ["id_isak", "nombre_jugadora", "fecha_medicion", "created_at", "usuario", "peso_bruto_kg"] if c in df_periodo.columns]
+    #     ],
+    #     hide_index=True
+    # )
 
 #st.dataframe(df, hide_index=True)
 #st.dataframe(df_periodo, hide_index=True)
@@ -68,19 +87,24 @@ peso_prom, chart_peso, delta_peso = calc_metric_block(df_periodo, periodo, "peso
 grasa_prom, chart_grasa, delta_grasa = calc_metric_block(df_periodo, periodo, "ajuste_adiposa_pct", "mean")
 musculo_prom, chart_musculo, delta_musculo = calc_metric_block(df_periodo, periodo, "ajuste_muscular_pct", "mean")
 indice_mo_prom, chart_mo, delta_mo = calc_metric_block(df_periodo, periodo, "idx_musculo_oseo", "mean")
+pliegues6_prom, chart_pliegues6, delta_pliegues6 = calc_metric_block(df_periodo, periodo, "suma_6_pliegues_mm","mean")
 
 #alertas_count, total_jugadoras, alertas_pct, chart_alertas, delta_alertas = calc_alertas(df_periodo, df, periodo)
 
-# ============================================================
-# 💠 TARJETAS DE MÉTRICAS
-# ============================================================
-render_metric_cards(
-    peso_prom, delta_peso, chart_peso,
-    grasa_prom, delta_grasa, chart_grasa,
-    musculo_prom, delta_musculo, chart_musculo,
-    indice_mo_prom, delta_mo, chart_mo,
-    articulo
-)
+# # ============================================================
+# # 💠 TARJETAS DE MÉTRICAS
+# # ============================================================
+# render_metric_cards(
+#     peso_prom, delta_peso, chart_peso,
+#     grasa_prom, delta_grasa, chart_grasa,
+#     musculo_prom, delta_musculo, chart_musculo,
+#     indice_mo_prom, delta_mo, chart_mo,pliegues6_prom, chart_pliegues6, delta_pliegues6,
+#     articulo
+# )
+# st.divider()
+# render_interpretacion_metricas_table(peso_prom, grasa_prom, musculo_prom, indice_mo_prom, pliegues6_prom)
+# st.divider()
+# render_resumen_tecnico_antropometria(peso_prom, grasa_prom, musculo_prom, indice_mo_prom, pliegues6_prom)
 # ============================================================
 # 📋 INTERPRETACIÓN Y RESUMEN TÉCNICO
 # ============================================================

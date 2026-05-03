@@ -231,21 +231,83 @@ def selection_header_registro(jug_df, comp_df, records_df=None):
 #######################################
 #######################################
 
-def selection_header(jug_df, comp_df, records_df=None, modo="reporte"):
+def selection_header(
+    jug_df: pd.DataFrame,
+    comp_df: pd.DataFrame,
+    records_df: pd.DataFrame = None,
+    modo: str = "registro",
+    jugadora_pre_id=None,
+    jugadora_pre_nombre=None,
+):
     col1, col2, col3 = st.columns([3, 2, 2])
 
     with col1:
         competicion = select_plantel(comp_df)
 
+        # --- Selección de jugadora ---
     with col2:
-        df_jug = filter_jugadoras_base(jug_df, competicion, posicion=None)
+        jugadora_opt = None
+        disabled_jugadores = True if modo == "reporte_grupal" else False
 
-        jugadora = select_jugadora_simple(
-            df_jug,
-            key="jugadora_selector",
-            disabled=(modo == "reporte_grupal"),
-            persist=True
-        )
+        if not jug_df.empty:
+            codigo_comp = competicion["codigo"]
+            jug_df_filtrado = jug_df[jug_df["plantel"] == codigo_comp].copy()
+
+            jugadora_nombres = (
+                jug_df_filtrado["nombre_jugadora"]
+                .astype(str)
+                .sort_values()
+                .tolist()
+            )
+
+            jugadora_index = None
+
+            # 1) Prioridad a la preselección por ID
+            if jugadora_pre_id is not None and "identificacion" in jug_df_filtrado.columns:
+                coincidencias = jug_df_filtrado[
+                    jug_df_filtrado["identificacion"].astype(str) == str(jugadora_pre_id)
+                ]["nombre_jugadora"].astype(str).tolist()
+
+                if coincidencias:
+                    nombre_pre = coincidencias[0]
+                    if nombre_pre in jugadora_nombres:
+                        jugadora_index = jugadora_nombres.index(nombre_pre)
+
+            # 2) Si no hay ID válido, probar por nombre
+            elif jugadora_pre_nombre and jugadora_pre_nombre in jugadora_nombres:
+                jugadora_index = jugadora_nombres.index(jugadora_pre_nombre)
+
+            # 3) Si no viene preselección, usar session_state como hasta ahora
+            elif (
+                "nombre_jugadora" in st.session_state
+                and st.session_state["nombre_jugadora"] in jugadora_nombres
+            ):
+                jugadora_index = jugadora_nombres.index(st.session_state["nombre_jugadora"])
+
+            jugadora_nombre = st.selectbox(
+                t("Jugadora"),
+                options=jugadora_nombres,
+                format_func=lambda x: f"{jugadora_nombres.index(x) + 1} - {x}",
+                index=jugadora_index,
+                placeholder=t("Seleccione una Jugadora"),
+                disabled=disabled_jugadores,
+                key="jugadora_selector"
+            )
+
+            if jugadora_nombre:
+                st.session_state["nombre_jugadora"] = jugadora_nombre
+            else:
+                st.session_state.pop("nombre_jugadora", None)
+
+            if "nombre_jugadora" in st.session_state:
+                jugadora_opt = jug_df_filtrado[
+                    jug_df_filtrado["nombre_jugadora"].astype(str) == st.session_state["nombre_jugadora"]
+                ]
+
+                if not jugadora_opt.empty:
+                    jugadora_opt = jugadora_opt.iloc[0].to_dict()
+                else:
+                    jugadora_opt = None
 
     with col3:
         hoy = datetime.date.today()
@@ -257,13 +319,13 @@ def selection_header(jug_df, comp_df, records_df=None, modo="reporte"):
 
     df_filtrado = filtrar_registros_reporte(
         records_df,
-        jugadora=jugadora,
+        jugadora=jugadora_opt,
         start=start,
         end=end,
         modo=modo,
     )
 
-    return df_filtrado, jugadora, start, end
+    return df_filtrado, jugadora_opt, start, end
 
 def filtrar_registros_reporte(
     df: pd.DataFrame,
