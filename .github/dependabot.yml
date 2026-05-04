@@ -1,0 +1,23 @@
+version: 2
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"   # donde está tu requirements.txt
+    schedule:
+      interval: "weekly"
+
+    open-pull-requests-limit: 5
+
+    commit-message:
+      prefix: "deps"
+
+    labels:
+      - "dependencies"
+      - "security"
+
+    reviewers:
+      - "devlogrono"
+
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]  
